@@ -1,0 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: black;
+  color: #00ffcc;
+  font-family: 'VT323', monospace;
+  height: 100%;
+  overflow: hidden;
+}
+
+canvas#bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.overlay {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 0 8px #00ffcc;
+}
+
+h1 {
+  font-size: 4rem;
+  letter-spacing: 4px;
+  margin: 0;
+}
+
+.subtitle {
+  opacity: 0.7;
+  margin-bottom: 40px;
+}
+
+.menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.menu li {
+  font-size: 1.8rem;
+  padding: 8px 20px;
+  margin: 6px 0;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.menu li:hover {
+  border-color: #00ffcc;
+  background: rgba(0, 255, 204, 0.1);
+  transform: translateX(6px);
+}
+
+footer {
+  position: absolute;
+  bottom: 20px;
+  font-size: 1rem;
+  opacity: 0.6;
+}
+
+/* CRT Scanlines */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255,255,255,0.03) 0px,
+    rgba(255,255,255,0.03) 1px,
+    transparent 2px,
+    transparent 4px
+  );
+  z-index: 2;
+}
+
+
+
+
+
+
+/* Scrollable menu container */
+.menu {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 60vh; /* smaller height for scroll area */
+  overflow-y: auto;
+  overflow-x: hidden; /* remove unwanted horizontal scroll */
+  width: 260px;
+}
+
+/* Scrollbar styling (right side) */
+.menu::-webkit-scrollbar {
+  width: 6px; /* smaller than before */
+}
+.menu::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.1);
+}
+.menu::-webkit-scrollbar-thumb {
+  background: #00ffcc;
+  border-radius: 3px;
+}
+
+/* Optional: hide scrollbar in Firefox while keeping scrolling */
+.menu {
+  scrollbar-width: thin;
+  scrollbar-color: #00ffcc rgba(0,0,0,0.1);
+}
+
+
+
+
+
