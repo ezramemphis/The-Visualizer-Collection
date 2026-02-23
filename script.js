@@ -10,7 +10,7 @@ document.querySelectorAll(".menu li").forEach(item => {
   // Hover sound effect
   item.addEventListener("mouseenter", () => {
     const audio = new Audio("thin_click.wav"); // add your hover sound file path
-    audio.volume = 0.3;
+    audio.volume = 0.5;
     audio.play();
   });
 });
