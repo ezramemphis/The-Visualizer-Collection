@@ -33,8 +33,8 @@ const settings = {
   rotationSpeed: 0.0012,
   spiralAmount: 2,
 
-  cuboidSize: 22,
-  cuboidHeight: 40,
+  cuboidSize: 0,
+  cuboidHeight: 0,
 
   platformBounce: 30,
 
