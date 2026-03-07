@@ -1,11 +1,60 @@
-import { ctx, canvas, analyser, freqData } from "./visualizer.js";
+import { ctx, canvas, analyser, freqData, devPanelActive } from "./visualizer.js";
+import { registerSceneSettings } from "./visualizer.js";
 
 let t = 0;
 let frame = 0;
 
-// Memory canvas for burn/ghosting
+/* ============================
+   MEMORY BUFFER
+============================ */
+
 const memCanvas = document.createElement("canvas");
 const memCtx = memCanvas.getContext("2d");
+
+/* ============================
+   SETTINGS (BIG ONE)
+============================ */
+
+const settings = {
+
+  // feedback core
+  feedbackAmount: 0.92,
+  feedbackZoom: 1.01,
+  feedbackRotation: 0.002,
+
+  // beam field
+  beamCount: 40,
+  beamLength: 300,
+  beamThickness: 2,
+  beamScatter: 80,
+
+  // signal distortion
+  horizontalTear: 0,
+  verticalRoll: 0,
+  phaseWarp: 0.5,
+  curvature: 0.0008,
+
+  // analog artifacts
+  scanlineIntensity: 0.2,
+  lumaBleed: 2,
+  chromaDrift: 5,
+  signalNoise: 0.02,
+
+  // collapse engine
+  collapseThreshold: 0.85,
+  collapseStrength: 40,
+  collapseSlices: 6,
+
+  // energy
+  timeSpeed: 0.03,
+  brightness: 1
+};
+
+registerSceneSettings(settings);
+
+/* ============================
+   RESIZE
+============================ */
 
 function resize() {
   canvas.width = window.innerWidth;
@@ -16,6 +65,10 @@ function resize() {
 resize();
 window.addEventListener("resize", resize);
 
+/* ============================
+   AUDIO
+============================ */
+
 function avg(start, end) {
   let sum = 0;
   for (let i = start; i < end; i++) sum += freqData[i];
@@ -24,74 +77,223 @@ function avg(start, end) {
 
 function rand(n) { return (Math.random() - 0.5) * n; }
 
+/* ============================
+   DEV PANEL
+============================ */
+
+function createPanel(){
+
+  const panel = document.createElement("div");
+
+  Object.assign(panel.style,{
+    position:"fixed",
+    top:"5px",
+    left:"5px",
+    padding:"8px",
+    background:"rgba(0,0,0,0.85)",
+    color:"#fff",
+    fontSize:"12px",
+    zIndex:9999,
+    display:"none",
+    maxHeight:"95vh",
+    overflowY:"auto"
+  });
+
+  panel.innerHTML = `
+  <b>DYING CRT — HALLUCINATION MODE</b><hr>
+
+  Feedback Amount <input type="range" id="feedbackAmount" min="0.7" max="0.99" step="0.005"><br>
+  Feedback Zoom <input type="range" id="feedbackZoom" min="0.98" max="1.05" step="0.001"><br>
+  Feedback Rotation <input type="range" id="feedbackRotation" min="0" max="0.01" step="0.0001"><br>
+
+  <hr><b>BEAMS</b><hr>
+
+  Beam Count <input type="range" id="beamCount" min="5" max="150"><br>
+  Beam Length <input type="range" id="beamLength" min="50" max="800"><br>
+  Beam Thickness <input type="range" id="beamThickness" min="1" max="10"><br>
+  Beam Scatter <input type="range" id="beamScatter" min="0" max="300"><br>
+
+  <hr><b>DISTORTION</b><hr>
+
+  Horizontal Tear <input type="range" id="horizontalTear" min="0" max="200"><br>
+  Vertical Roll <input type="range" id="verticalRoll" min="0" max="50"><br>
+  Phase Warp <input type="range" id="phaseWarp" min="0" max="3" step="0.1"><br>
+  Curvature <input type="range" id="curvature" min="0" max="0.003" step="0.0001"><br>
+
+  <hr><b>ANALOG</b><hr>
+
+  Scanlines <input type="range" id="scanlineIntensity" min="0" max="1" step="0.01"><br>
+  Luma Bleed <input type="range" id="lumaBleed" min="0" max="10"><br>
+  Chroma Drift <input type="range" id="chromaDrift" min="0" max="20"><br>
+  Signal Noise <input type="range" id="signalNoise" min="0" max="0.2" step="0.005"><br>
+
+  <hr><b>COLLAPSE</b><hr>
+
+  Collapse Threshold <input type="range" id="collapseThreshold" min="0" max="1" step="0.01"><br>
+  Collapse Strength <input type="range" id="collapseStrength" min="0" max="200"><br>
+  Collapse Slices <input type="range" id="collapseSlices" min="0" max="20"><br>
+
+  <hr>
+
+  Time Speed <input type="range" id="timeSpeed" min="0.005" max="0.2" step="0.005"><br>
+  Brightness <input type="range" id="brightness" min="0.2" max="2" step="0.05"><br>
+  `;
+
+  document.body.appendChild(panel);
+
+  Object.keys(settings).forEach(key=>{
+    const el = panel.querySelector(`#${key}`);
+    if(!el) return;
+    el.value = settings[key];
+    el.addEventListener("input", e=>{
+      settings[key] = parseFloat(e.target.value);
+    });
+  });
+
+  return panel;
+}
+
+const devPanel = createPanel();
+
+/* ============================
+   DRAW
+============================ */
+
 function draw() {
+
   requestAnimationFrame(draw);
   analyser.getByteFrequencyData(freqData);
 
-  const bass = avg(0, 8);
-  const mid = avg(8, 60);
+  const bass = avg(0, 10);
+  const mid  = avg(10, 60);
   const high = avg(60, 160);
+
+  if(devPanel)
+    devPanel.style.display = devPanelActive ? "block" : "none";
 
   frame++;
 
-  // ---- Base phosphor smear ----
-  ctx.globalAlpha = 0.1 + bass * 0.05;
-  ctx.drawImage(memCanvas, rand(mid * 50), rand(mid * 50));
-  ctx.globalAlpha = 1;
-
-  // ---- flickering dark background ----
-  ctx.fillStyle = `rgba(0,0,0,${0.05 + bass*0.05})`;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  /* ============================
+     FEEDBACK CORE
+  ============================ */
 
   ctx.save();
-  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.translate(canvas.width/2, canvas.height/2);
+  ctx.rotate(settings.feedbackRotation * frame);
+  ctx.scale(settings.feedbackZoom, settings.feedbackZoom);
+  ctx.translate(-canvas.width/2, -canvas.height/2);
 
-  // ---- organic glitchy wave shapes ----
-  const lines = 25 + Math.floor(high * 50);
-  for (let i = 0; i < lines; i++) {
-    const angle = t * 0.05 + i * 0.6;
-    const radius = 50 + Math.sin(angle * 3 + frame*0.02) * 300 * bass;
+  ctx.globalAlpha = settings.feedbackAmount;
+  ctx.drawImage(memCanvas, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.restore();
 
-    const x = Math.cos(angle) * radius + Math.sin(frame * 0.01 + i) * 40 * high;
-    const y = Math.sin(angle) * radius + Math.cos(frame * 0.01 + i) * 40 * high;
+  ctx.fillStyle = `rgba(0,0,0,${0.08})`;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    ctx.strokeStyle = `hsla(${frame*2 + i*15},100%,${50 + high*40}%,${0.2 + mid*0.5})`;
-    ctx.lineWidth = 1 + bass*5;
+  /* ============================
+     BEAM FIELD
+  ============================ */
+
+  ctx.save();
+  ctx.translate(canvas.width/2, canvas.height/2);
+
+  const beams = settings.beamCount + Math.floor(high*100);
+
+  for(let i=0;i<beams;i++){
+
+    const angle =
+      (i/beams)*Math.PI*2 +
+      t*settings.phaseWarp;
+
+    const r =
+      settings.beamLength *
+      (0.3 + bass);
+
+    const x =
+      Math.cos(angle)*r +
+      rand(settings.beamScatter*mid);
+
+    const y =
+      Math.sin(angle)*r +
+      rand(settings.beamScatter*mid);
+
+    ctx.strokeStyle =
+      `hsla(${(frame*5+i*20)%360},100%,${50+high*40}%,${0.3+mid})`;
+
+    ctx.lineWidth =
+      settings.beamThickness + bass*4;
 
     ctx.beginPath();
-    ctx.moveTo(x + rand(high*20), y + rand(high*20));
-    ctx.lineTo(x + Math.sin(frame*0.03+i)*50, y + Math.cos(frame*0.03+i)*50);
+    ctx.moveTo(0,0);
+    ctx.lineTo(x,y);
     ctx.stroke();
   }
 
-  // ---- CRT horizontal scan wobble ----
-  const wobble = Math.sin(frame*0.03)*10 + bass*15;
-  ctx.transform(1, 0, 0.02*bass, 1, 0, wobble);
+  ctx.restore();
 
-  // ---- pixel shatter / signal drop effect ----
-  if(bass + high > 0.9){
-    for(let s=0; s<5; s++){
+  /* ============================
+     HORIZONTAL TEAR
+  ============================ */
+
+  if(settings.horizontalTear > 0){
+    for(let i=0;i<5;i++){
       const y = Math.random()*canvas.height;
-      const h = 2 + Math.random()*30;
-      const xOff = rand(200*bass);
-      ctx.drawImage(canvas, 0, y, canvas.width, h, xOff, y, canvas.width, h);
+      const h = 2+Math.random()*20;
+      const offset = rand(settings.horizontalTear*bass);
+      ctx.drawImage(canvas,0,y,canvas.width,h,offset,y,canvas.width,h);
     }
   }
 
-  // ---- RGB chromatic split ----
+  /* ============================
+     VERTICAL ROLL
+  ============================ */
+
+  if(settings.verticalRoll > 0){
+    const roll = (frame*settings.verticalRoll) % canvas.height;
+    ctx.drawImage(canvas,0,roll);
+  }
+
+  /* ============================
+     SIGNAL COLLAPSE
+  ============================ */
+
+  if(bass > settings.collapseThreshold){
+    for(let i=0;i<settings.collapseSlices;i++){
+      const y = Math.random()*canvas.height;
+      const h = 2+Math.random()*30;
+      const offset = rand(settings.collapseStrength);
+      ctx.drawImage(canvas,0,y,canvas.width,h,offset,y,canvas.width,h);
+    }
+  }
+
+  /* ============================
+     SCANLINES
+  ============================ */
+
+  ctx.fillStyle = `rgba(0,0,0,${settings.scanlineIntensity})`;
+  for(let y=0;y<canvas.height;y+=2){
+    ctx.fillRect(0,y,canvas.width,1);
+  }
+
+  /* ============================
+     CHROMA DRIFT
+  ============================ */
+
   ctx.globalCompositeOperation = "screen";
-  ctx.drawImage(canvas, bass*10, 0);
-  ctx.drawImage(canvas, -bass*10, 0);
+  ctx.drawImage(canvas, settings.chromaDrift*bass, 0);
+  ctx.drawImage(canvas, -settings.chromaDrift*bass, 0);
   ctx.globalCompositeOperation = "source-over";
 
-  ctx.restore();
+  /* ============================
+     MEMORY UPDATE
+  ============================ */
 
-  // ---- update memory canvas for burn effect ----
-  memCtx.globalAlpha = 0.9;
+  memCtx.globalAlpha = settings.feedbackAmount;
   memCtx.drawImage(canvas, 0, 0);
   memCtx.globalAlpha = 1;
 
-  t += 0.03 + bass*0.2;
+  t += settings.timeSpeed + bass*0.1;
 }
 
 draw();

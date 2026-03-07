@@ -1,4 +1,5 @@
 import { ctx, canvas, analyser, freqData, timeData, devPanelActive } from "./visualizer.js";
+import { registerSceneSettings } from "./visualizer.js";
 
 let frame = 0, width = canvas.width, height = canvas.height;
 function resize() { width = canvas.width; height = canvas.height; }
@@ -18,6 +19,8 @@ const settings = {
   bgAlpha: 0.15
 };
 
+registerSceneSettings(settings);
+
 let devPanel;
 function createDevPanel() {
   devPanel = document.createElement("div");
@@ -34,7 +37,7 @@ function createDevPanel() {
   devPanel.style.display = "none";
 
   devPanel.innerHTML = `
-    <div style="margin-bottom:4px;font-weight:bold;font-size:10px;">DEV PANEL</div>
+    <div style="margin-bottom:4px;font-weight:bold;font-size:10px;"><b>DEV PANEL — GEODESIC</b><hr>
     <label>Line Count: <input type="range" id="devLineCount" min="10" max="120" step="1" value="${settings.lineCount}"></label><br>
     <label>Line Density: <input type="range" id="devLineDensity" min="1" max="12" step="0.1" value="${settings.lineDensity}"></label><br>
     <label>Radial Amp: <input type="range" id="devRadialAmp" min="0" max="200" step="1" value="${settings.radialAmp}"></label><br>

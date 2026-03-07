@@ -1,5 +1,5 @@
 import {
-  ctx, canvas, analyser, freqData, timeData
+  ctx, canvas, analyser, freqData, timeData, devPanelActive
 } from "./visualizer.js";
 
 let frame = 0;
@@ -47,6 +47,105 @@ for(let i=0;i<400;i++){
     size:Math.random()*2+0.5
   });
 }
+
+//////////////////////////////////////////////////////////
+// DEV PANEL — SPACETIME VORTEX ENGINE
+//////////////////////////////////////////////////////////
+
+let devPanel;
+
+const settings = {
+
+  decay:0.3,
+
+  wobbleStrength:1,
+
+  rotationSpeed:1,
+
+  vortexLayers:200,
+
+  particleSpeedMult:1,
+
+  particleShrinkRate:1,
+
+  spiralWarp:1,
+
+  bassGlow:1,
+  midGlow:1,
+  highGlow:1
+};
+
+function createDevPanel(){
+
+  devPanel=document.createElement("div");
+
+  Object.assign(devPanel.style,{
+    position:"fixed",
+    top:"10px",
+    left:"10px",
+    width:"260px",
+    padding:"10px",
+    background:"rgba(0,0,0,0.85)",
+    color:"#fff",
+    fontFamily:"sans-serif",
+    fontSize:"12px",
+    borderRadius:"10px",
+    zIndex:9999,
+    display:"none",
+    backdropFilter:"blur(8px)",
+    maxHeight:"95vh",
+    overflowY:"auto"
+  });
+
+  devPanel.innerHTML=`
+
+  <b>SPACETIME VORTEX DEV</b><hr>
+
+  Background Decay
+  <input type="range" id="decay" min="0.05" max="0.6" step="0.01"><br>
+
+  Wobble Strength
+  <input type="range" id="wobbleStrength" min="0" max="5" step="0.1"><br>
+
+  Rotation Speed
+  <input type="range" id="rotationSpeed" min="0" max="5" step="0.1"><br>
+
+  Spiral Warp Mult
+  <input type="range" id="spiralWarp" min="0" max="3" step="0.1"><br>
+
+  Particle Speed Mult
+  <input type="range" id="particleSpeedMult" min="0" max="3" step="0.1"><br>
+
+  Particle Shrink Rate
+  <input type="range" id="particleShrinkRate" min="0" max="3" step="0.1"><br>
+
+  Bass Glow
+  <input type="range" id="bassGlow" min="0" max="3" step="0.1"><br>
+
+  Mid Glow
+  <input type="range" id="midGlow" min="0" max="3" step="0.1"><br>
+
+  High Glow
+  <input type="range" id="highGlow" min="0" max="3" step="0.1"><br>
+  `;
+
+  document.body.appendChild(devPanel);
+
+  Object.keys(settings).forEach(key=>{
+
+    const el=devPanel.querySelector(`#${key}`);
+    if(!el) return;
+
+    el.value=settings[key];
+
+    el.addEventListener("input",e=>{
+      settings[key]=parseFloat(e.target.value);
+    });
+
+  });
+}
+
+createDevPanel();
 
 function draw(){
 

@@ -85,3 +85,357 @@ body.performance-mode .overlay {
   pointer-events: none;
   transition: opacity 0.3s ease;
 }
+
+
+
+
+
+
+
+/* =====================================================
+   CYBER VISUALIZER RANGE PROGRESS (ONLY .controls PANEL)
+===================================================== */
+
+.controls input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+
+  width: 220px;
+  height: 14px;
+
+  background: transparent;
+
+  cursor: pointer;
+}
+
+/* Track */
+.controls input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+
+  background: rgba(0,0,0,0.6);
+
+  border-radius: 20px;
+
+  box-shadow:
+    inset 0 0 6px rgba(0,0,0,0.9),
+    0 0 6px rgba(0,255,204,0.2);
+}
+
+/* Thumb */
+.controls input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+
+  height: 14px;
+  width: 14px;
+
+  margin-top: -4px;
+
+  background: #00ffcc;
+
+  border-radius: 50%;
+
+  box-shadow:
+    0 0 12px rgba(0,255,204,0.9),
+    0 0 4px rgba(0,255,204,0.6);
+
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+/* Hover */
+.controls input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.25);
+
+  box-shadow:
+    0 0 18px rgba(0,255,204,1);
+}
+
+/* Firefox */
+.controls input[type="range"]::-moz-range-track {
+  height: 6px;
+
+  background: rgba(0,0,0,0.6);
+
+  border-radius: 20px;
+}
+
+.controls input[type="range"]::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+
+  background: #00ffcc;
+
+  border: none;
+  border-radius: 50%;
+
+  box-shadow:
+    0 0 12px rgba(0,255,204,0.9);
+}
+
+
+/* =====================================================
+   PERFORMANCE CYBER PLAY BUTTON
+===================================================== */
+
+#play {
+  position: relative;
+
+  background: transparent;
+
+  border: 1px solid rgba(0,255,204,0.6);
+
+  color: #00ffcc;
+
+  font-family: inherit;
+
+  font-size: 18px;
+
+  letter-spacing: 3px;
+
+  padding: 10px 22px;
+
+  cursor: pointer;
+
+  border-radius: 8px;
+
+  text-shadow: 0 0 6px rgba(0,255,204,0.7);
+
+  box-shadow:
+    inset 0 0 10px rgba(0,0,0,0.8),
+    0 0 10px rgba(0,255,204,0.25);
+
+  transition:
+    all 0.25s ease;
+}
+
+/* Hover State */
+#play:hover {
+  background: rgba(0,255,204,0.08);
+
+  transform: scale(1.04);
+
+  box-shadow:
+    0 0 18px rgba(0,255,204,0.8),
+    inset 0 0 14px rgba(0,0,0,0.9);
+}
+
+/* Active Press State */
+#play:active {
+  transform: scale(0.96);
+
+  box-shadow:
+    0 0 6px rgba(0,255,204,0.4);
+}
+
+/* Playing State (toggle via JS) */
+#play.playing {
+  color: black;
+  background: #00ffcc;
+
+  text-shadow: none;
+
+  box-shadow:
+    0 0 22px rgba(0,255,204,1);
+}
+
+
+
+
+
+
+
+
+/* =====================================================
+   INSANELY REFINED PERFORMANCE META CONSOLE
+===================================================== */
+
+.ui {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+
+  z-index: 20;
+
+  display: flex;
+  align-items: center;
+  gap: 16px;
+
+  padding: 14px 18px;
+
+  border-radius: 14px;
+
+  backdrop-filter: blur(18px) saturate(180%);
+
+  background: linear-gradient(
+    145deg,
+    rgba(0,0,0,0.75),
+    rgba(0,40,35,0.5)
+  );
+
+  box-shadow:
+    0 0 40px rgba(0,255,204,0.15),
+    inset 0 0 1px rgba(0,255,204,0.4);
+
+  animation: uiFloatPulse 8s ease-in-out infinite;
+}
+
+/* Slow Ambient Pulse */
+@keyframes uiFloatPulse {
+  0% {
+    box-shadow:
+      0 0 30px rgba(0,255,204,0.08),
+      inset 0 0 1px rgba(0,255,204,0.3);
+  }
+
+  50% {
+    box-shadow:
+      0 0 60px rgba(0,255,204,0.25),
+      inset 0 0 2px rgba(0,255,204,0.5);
+  }
+
+  100% {
+    box-shadow:
+      0 0 30px rgba(0,255,204,0.08),
+      inset 0 0 1px rgba(0,255,204,0.3);
+  }
+}
+
+/* =====================================================
+   META SECTION
+===================================================== */
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Album Cover */
+.meta img {
+  width: 72px;
+  height: 72px;
+
+  border-radius: 10px;
+
+  object-fit: cover;
+
+  background: black;
+
+  border: 1px solid rgba(0,255,204,0.4);
+
+  box-shadow:
+    0 0 20px rgba(0,255,204,0.25);
+
+  transition: transform 0.3s ease;
+}
+
+.meta img:hover {
+  transform: scale(1.08);
+}
+
+/* Text Metadata */
+
+#title {
+  font-size: 18px;
+  letter-spacing: 2px;
+
+  color: #00ffcc;
+
+  text-shadow:
+    0 0 8px rgba(0,255,204,0.7);
+}
+
+#artist,
+#album {
+  font-size: 13px;
+
+  opacity: 0.75;
+
+  letter-spacing: 1px;
+}
+
+/* Subtle Animated Energy Line Under Meta */
+
+.meta::after {
+  content: "";
+
+  position: absolute;
+  bottom: 6px;
+  left: 14px;
+  right: 14px;
+
+  height: 1px;
+
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0,255,204,0.6),
+    transparent
+  );
+
+  animation: metaLineScan 6s linear infinite;
+}
+
+@keyframes metaLineScan {
+  0% { opacity: 0.2; transform: translateX(-40px); }
+  50% { opacity: 1; }
+  100% { opacity: 0.2; transform: translateX(40px); }
+}
+
+
+
+
+
+
+
+/* ================================
+   ANALOG KNOB IMAGE SLIDERS
+================================ */
+
+input.slider-main,
+input.slider-exp {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+/* Track */
+input.slider-main::-webkit-slider-runnable-track,
+input.slider-exp::-webkit-slider-runnable-track {
+  height: 4px;
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+/* Thumb base */
+input.slider-main::-webkit-slider-thumb,
+input.slider-exp::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+
+  height: 22px;
+width: 22px;
+
+  display: block;
+
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  transform: translateY(3px) rotate(90deg);
+
+  border: none;
+  cursor: pointer;
+
+  margin-top: -12px;
+}
+
+/* Main panel knob */
+input.slider-main::-webkit-slider-thumb {
+  background-image: url("black_slider.jpg");
+}
+
+/* Experimental panel knob */
+input.slider-exp::-webkit-slider-thumb {
+  background-image: url("white_slider.jpg");
+}

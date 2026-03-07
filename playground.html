@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ALT VISUALIZER PLAYGROUND</title>
+<link rel="stylesheet" href="playground.css">
+</head>
+<body>
+
+<div id="topBar">
+  <button onclick="window.location.href='index.html'">← HUB</button>
+
+  <select id="templateSelect">
+    <option value="">Load Template</option>
+    <option value="t1">Minimal Particle Loop</option>
+    <option value="t2">Glow Circle</option>
+    <option value="t3">Wave Ritual Line</option>
+    <option value="t4">Spectrum Bars</option>
+    <option value="t5">Noise Field</option>
+  </select>
+</div>
+
+<div id="editorPanel">
+  <textarea id="editor"></textarea>
+</div>
+
+<div id="previewPanel">
+  <iframe id="previewFrame"></iframe>
+</div>
+
+<script src="playground.js" type="module"></script>
+
+</body>
+</html>

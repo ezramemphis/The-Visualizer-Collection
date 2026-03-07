@@ -73,19 +73,19 @@ function createDevPanel(){
   DEV PANEL
   </div>
 
-  Node Count <input id="devNodeCount" type="range" min="20" max="200" value="${settings.nodeCount}"><br>
-  Node Size <input id="devNodeSize" type="range" min="1" max="10" step="0.5" value="${settings.nodeSize}"><br>
-  Orbit Speed <input id="devOrbitSpeed" type="range" min="0.0005" max="0.01" step="0.0005" value="${settings.orbitSpeed}"><br>
-  Rotation <input id="devGlobalRot" type="range" min="0" max="0.01" step="0.0005" value="${settings.globalRotation}"><br>
-  Pulse <input id="devPulse" type="range" min="0" max="200" value="${settings.pulseAmount}"><br>
-  Connection Dist <input id="devConnDist" type="range" min="50" max="400" value="${settings.connectionDist}"><br>
-  Connection Width <input id="devConnWidth" type="range" min="0.1" max="5" step="0.1" value="${settings.connectionWidth}"><br>
-  Hue Start <input id="devHueStart" type="range" min="0" max="360" value="${settings.hueStart}"><br>
-  Hue Shift <input id="devHueShift" type="range" min="0" max="2" step="0.05" value="${settings.hueShiftSpeed}"><br>
-  Saturation <input id="devSat" type="range" min="0" max="100" value="${settings.saturation}"><br>
-  Lightness <input id="devLight" type="range" min="0" max="100" value="${settings.lightness}"><br>
-  Glow <input id="devGlow" type="range" min="0" max="1" step="0.01" value="${settings.glowAlpha}"><br>
-  BG Fade <input id="devBgAlpha" type="range" min="0" max="1" step="0.01" value="${settings.bgAlpha}">
+  Node Count <input id="devNodeCount" type="range" class="slider-main" min="20" max="200" value="${settings.nodeCount}"><br>
+  Node Size <input id="devNodeSize" type="range" class="slider-main" min="1" max="10" step="0.5" value="${settings.nodeSize}"><br>
+  Orbit Speed <input id="devOrbitSpeed" type="range" class="slider-main" min="0.0005" max="0.01" step="0.0005" value="${settings.orbitSpeed}"><br>
+  Rotation <input id="devGlobalRot" type="range" class="slider-main" min="0" max="0.01" step="0.0005" value="${settings.globalRotation}"><br>
+  Pulse <input id="devPulse" type="range" class="slider-main" min="0" max="200" value="${settings.pulseAmount}"><br>
+  Connection Dist <input id="devConnDist" type="range" class="slider-main" min="50" max="400" value="${settings.connectionDist}"><br>
+  Connection Width <input id="devConnWidth" type="range" class="slider-main" min="0.1" max="5" step="0.1" value="${settings.connectionWidth}"><br>
+  Hue Start <input id="devHueStart" type="range" class="slider-main" min="0" max="360" value="${settings.hueStart}"><br>
+  Hue Shift <input id="devHueShift" type="range" class="slider-main" min="0" max="2" step="0.05" value="${settings.hueShiftSpeed}"><br>
+  Saturation <input id="devSat" type="range" class="slider-main" min="0" max="100" value="${settings.saturation}"><br>
+  Lightness <input id="devLight" type="range" class="slider-main" min="0" max="100" value="${settings.lightness}"><br>
+  Glow <input id="devGlow" type="range" class="slider-main" min="0" max="1" step="0.01" value="${settings.glowAlpha}"><br>
+  BG Fade <input id="devBgAlpha" type="range" class="slider-main" min="0" max="1" step="0.01" value="${settings.bgAlpha}">
   `;
 
   document.body.appendChild(devPanel);

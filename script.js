@@ -135,3 +135,32 @@ function draw() {
 }
 
 draw();
+
+
+
+
+
+
+
+document.addEventListener("DOMContentLoaded",()=>{
+  const count =
+    document.querySelectorAll(".menu li").length;
+
+  const title =
+    document.querySelector(".overlay h1");
+
+  if(title){
+    const badge = document.createElement("span");
+
+    badge.textContent = ` (${count})`;
+
+    badge.style.fontSize = "15px";
+    badge.style.opacity = "0.95";
+    badge.style.color = "#7fffd4"; // soft readable accent color
+    badge.style.fontFamily = "Arial, Helvetica, sans-serif";
+    badge.style.fontWeight = "500";
+    badge.style.marginLeft = "6px";
+
+    title.appendChild(badge);
+  }
+});
