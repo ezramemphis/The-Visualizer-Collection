@@ -1,5 +1,5 @@
 // ===============================
-// VISUALIZER — CAROUSEL ENGINE
+// VISUALIZER — CAROUSEL ENGINE V2
 // ===============================
 
 import { ctx, canvas, analyser, freqData, devPanelActive } from "./visualizer.js";
@@ -10,237 +10,290 @@ let height = canvas.height;
 let frame = 0;
 
 /* ======================================================
- AUDIO
+AUDIO
 ====================================================== */
 
 function avg(s,e){
-  let v = 0;
-  const len = Math.max(1,e-s);
-  for(let i=s;i<e;i++) v += freqData[i] || 0;
-  return (v/len)/255;
+ let v=0;
+ const len=Math.max(1,e-s);
+ for(let i=s;i<e;i++) v+=freqData[i]||0;
+ return (v/len)/255;
 }
 
 /* ======================================================
- SETTINGS
+SETTINGS
 ====================================================== */
 
-const settings = {
+const settings={
 
-  carouselRadius: 330,
-  poleCount: 20,
-  poleHeight: 150,
+ radius:320,
+ poleCount:20,
+ poleHeight:180,
 
-  rotationSpeed: 0.0012,
-  spiralAmount: 2,
+ rotationSpeed:0.0012,
 
-  cuboidSize: 0,
-  cuboidHeight: 0,
+ cuboidSize:26,
+ cuboidHeight:60,
 
-  platformBounce: 30,
+ helixAmount:6,
 
-  glow: 0.6,
-  bgAlpha: 0.2
+ particleCount:80,
+ particleOrbit:260,
+ particleSize:2,
+
+ cameraTilt:0.4,
+
+ hueBase:45,
+ hueShift:0.4,
+
+ glow:0.6,
+ bgAlpha:0.18
+
 };
 
 registerSceneSettings(settings);
 
 /* ======================================================
- RESIZE
+RESIZE
 ====================================================== */
 
 function resize(){
-  width = canvas.width;
-  height = canvas.height;
+ width=canvas.width;
+ height=canvas.height;
 }
-
 window.addEventListener("resize",resize);
 resize();
 
 /* ======================================================
- DEV PANEL
+DEV PANEL
 ====================================================== */
 
 let devPanel;
 
 function createDevPanel(){
 
-  devPanel = document.createElement("div");
+ devPanel=document.createElement("div");
 
-  Object.assign(devPanel.style,{
-    position:"fixed",
-    top:"5px",
-    left:"5px",
-    padding:"8px",
-    background:"rgba(0,0,0,0.85)",
-    color:"#fff",
-    fontFamily:"sans-serif",
-    fontSize:"12px",
-    borderRadius:"6px",
-    zIndex:9999,
-    display:"none"
+ Object.assign(devPanel.style,{
+  position:"fixed",
+  top:"5px",
+  left:"5px",
+  padding:"8px",
+  background:"rgba(0,0,0,0.85)",
+  color:"#fff",
+  fontFamily:"sans-serif",
+  fontSize:"12px",
+  borderRadius:"6px",
+  zIndex:9999,
+  display:"none"
+ });
+
+ let html=`<b>CAROUSEL ENGINE</b><hr>`;
+
+ Object.keys(settings).forEach(k=>{
+  html+=`${k}<input type="range" id="${k}" min="0" max="600" step="0.01"><br>`;
+ });
+
+ devPanel.innerHTML=html;
+
+ document.body.appendChild(devPanel);
+
+ Object.keys(settings).forEach(key=>{
+  const el=devPanel.querySelector(`#${key}`);
+  if(!el)return;
+
+  el.value=settings[key];
+
+  el.addEventListener("input",e=>{
+   settings[key]=parseFloat(e.target.value);
   });
+ });
 
-  devPanel.innerHTML = `
-  <b>CAROUSEL ENGINE</b><hr>
-
-  Radius <input type="range" id="carouselRadius" min="50" max="500"><br>
-  Pole Count <input type="range" id="poleCount" min="4" max="32"><br>
-  Pole Height <input type="range" id="poleHeight" min="100" max="600"><br>
-
-  Rotation Speed <input type="range" id="rotationSpeed" min="0" max="0.05" step="0.001"><br>
-  Spiral Amount <input type="range" id="spiralAmount" min="0" max="6" step="0.1"><br>
-
-  Cuboid Size <input type="range" id="cuboidSize" min="10" max="120"><br>
-  Cuboid Height <input type="range" id="cuboidHeight" min="10" max="200"><br>
-
-  Platform Bounce <input type="range" id="platformBounce" min="0" max="200"><br>
-
-  Glow <input type="range" id="glow" min="0" max="2" step="0.05"><br>
-  BG Alpha <input type="range" id="bgAlpha" min="0" max="1" step="0.01"><br>
-  `;
-
-  document.body.appendChild(devPanel);
-
-  Object.keys(settings).forEach(key=>{
-    const el = devPanel.querySelector(`#${key}`);
-    if(!el) return;
-
-    el.value = settings[key];
-
-    el.addEventListener("input",e=>{
-      settings[key] = parseFloat(e.target.value);
-    });
-  });
 }
 
 createDevPanel();
 
 /* ======================================================
- FAKE 3D PROJECTION
+PROJECTION
 ====================================================== */
 
 function project(x,y,z){
 
-  const scale = 600 / (600 + z);
+ const scale=600/(600+z);
 
-  return {
-    x: x * scale,
-    y: y * scale,
-    s: scale
-  };
+ return{
+  x:x*scale,
+  y:y*scale,
+  s:scale
+ };
+
 }
 
 /* ======================================================
- DRAW
+PARTICLES
+====================================================== */
+
+const particles=[];
+
+for(let i=0;i<settings.particleCount;i++){
+
+ particles.push({
+
+  angle:Math.random()*Math.PI*2,
+  height:(Math.random()-0.5)*200,
+  speed:Math.random()*0.02+0.01
+
+ });
+
+}
+
+/* ======================================================
+DRAW
 ====================================================== */
 
 function draw(){
 
-  requestAnimationFrame(draw);
+ requestAnimationFrame(draw);
 
-  if(devPanel)
-    devPanel.style.display = devPanelActive ? "block" : "none";
+ if(devPanel)
+ devPanel.style.display=devPanelActive?"block":"none";
 
-  analyser.getByteFrequencyData(freqData);
+ analyser.getByteFrequencyData(freqData);
 
-  const bass = avg(0,20);
-  const mids = avg(40,100);
-  const highs = avg(120,200);
+ const bass=avg(0,20);
+ const mids=avg(40,100);
+ const highs=avg(120,200);
 
-  frame += settings.rotationSpeed * 100;
+ frame+=settings.rotationSpeed*100;
 
-  ctx.fillStyle = `rgba(0,0,0,${settings.bgAlpha})`;
-  ctx.fillRect(0,0,width,height);
+ ctx.fillStyle=`rgba(0,0,0,${settings.bgAlpha})`;
+ ctx.fillRect(0,0,width,height);
 
-  ctx.save();
-  ctx.translate(width/2,height/2);
+ ctx.save();
 
-  const bounce =
-    Math.sin(frame*0.08) *
-    settings.platformBounce *
-    bass;
+ ctx.translate(width/2,height/2);
 
-  const radius = settings.carouselRadius;
+ /* CAMERA TILT */
 
-  /* ===============================
-     DRAW POLES
-  =============================== */
+ const camX=Math.sin(frame*0.4)*settings.cameraTilt*80;
+ const camY=Math.cos(frame*0.3)*settings.cameraTilt*60;
 
-  for(let i=0;i<settings.poleCount;i++){
+ ctx.translate(camX,camY);
 
-    const a =
-      i/settings.poleCount * Math.PI*2 +
-      frame*settings.rotationSpeed*10;
+ const bounce=
+ Math.sin(frame*0.05)
+ *settings.cuboidHeight
+ *bass;
 
-    const spiral =
-      Math.sin(frame*0.2 + i)
-      * settings.spiralAmount
-      * mids;
+ /* ===============================
+ PLATFORM RING
+ =============================== */
 
-    const x =
-      Math.cos(a) * radius;
+ ctx.beginPath();
 
-    const z =
-      Math.sin(a) * radius;
+ for(let a=0;a<Math.PI*2;a+=0.1){
 
-    const p = project(x,0,z);
+  const x=Math.cos(a)*settings.radius;
+  const z=Math.sin(a)*settings.radius;
 
-    const top = project(x, -settings.poleHeight + bounce, z);
-    const bottom = project(x, bounce, z);
+  const p=project(x,0,z);
 
-    /* GOLD SPIRAL POLE */
+  if(a===0) ctx.moveTo(p.x,p.y);
+  else ctx.lineTo(p.x,p.y);
 
-    ctx.lineWidth = 6 * p.s;
+ }
 
-    const hue = 45 + Math.sin(frame*0.05+i)*10;
+ ctx.strokeStyle=`hsla(${settings.hueBase+frame*settings.hueShift},80%,60%,0.4)`;
+ ctx.lineWidth=2;
+ ctx.stroke();
 
-    ctx.strokeStyle =
-      `hsla(${hue},100%,60%,${0.7 + highs})`;
+ /* ===============================
+ POLES
+ =============================== */
 
-    ctx.beginPath();
-    ctx.moveTo(top.x, top.y);
-    ctx.lineTo(bottom.x, bottom.y);
-    ctx.stroke();
+ for(let i=0;i<settings.poleCount;i++){
 
-    /* ===============================
-       CUBOID "HORSE"
-    =============================== */
+ const a=
+ i/settings.poleCount*Math.PI*2+
+ frame*settings.rotationSpeed*12;
 
-    const cubeY =
-      -settings.cuboidHeight/2 +
-      Math.sin(frame*0.1 + i)*30*mids;
+ const x=Math.cos(a)*settings.radius;
+ const z=Math.sin(a)*settings.radius;
 
-    const cp = project(x, cubeY + bounce, z);
+ const top=project(x,-settings.poleHeight+bounce,z);
+ const bottom=project(x,bounce,z);
 
-    const size =
-      settings.cuboidSize *
-      cp.s *
-      (1 + mids*2);
+ ctx.strokeStyle=`hsla(${settings.hueBase+10},100%,60%,0.7)`;
+ ctx.lineWidth=3;
 
-    ctx.fillStyle =
-      `hsla(50,100%,70%,${0.8 + highs})`;
+ ctx.beginPath();
+ ctx.moveTo(top.x,top.y);
+ ctx.lineTo(bottom.x,bottom.y);
+ ctx.stroke();
 
-    ctx.fillRect(
-      cp.x - size/2,
-      cp.y - size/2,
-      size,
-      size
-    );
+ /* HELIX LIGHTS */
 
-    /* LIGHT ORB */
+ for(let h=0;h<settings.poleHeight;h+=10){
 
-    ctx.beginPath();
-    ctx.arc(cp.x, cp.y - size,
-      size*0.4 + highs*10,
-      0,Math.PI*2);
+ const twist=
+ Math.sin(h*0.1+frame*0.5+i)
+ *settings.helixAmount;
 
-    ctx.fillStyle =
-      `hsla(60,100%,80%,${settings.glow})`;
+ const hx=x+Math.cos(twist)*8;
+ const hz=z+Math.sin(twist)*8;
 
-    ctx.fill();
-  }
+ const p=project(hx,-h+bounce,hz);
 
-  ctx.restore();
+ ctx.fillStyle=`hsla(${settings.hueBase+frame*settings.hueShift},90%,65%,${0.4+highs})`;
+
+ ctx.fillRect(p.x,p.y,3*p.s,3*p.s);
+
+ }
+
+ /* ===============================
+ CUBOID RIDERS
+ =============================== */
+
+ const cubeY=
+ -settings.poleHeight/2+
+ Math.sin(frame*0.15+i)*30*mids;
+
+ const cp=project(x,cubeY+bounce,z);
+
+ const size=
+ settings.cuboidSize*
+ cp.s*
+ (1+mids*2);
+
+ ctx.fillStyle=`hsla(${settings.hueBase+180},80%,70%,0.9)`;
+
+ ctx.fillRect(cp.x-size/2,cp.y-size/2,size,size);
+
+ }
+
+ /* ===============================
+ ORBIT PARTICLES
+ =============================== */
+
+ particles.forEach(p=>{
+
+ p.angle+=p.speed*(1+highs*2);
+
+ const x=Math.cos(p.angle)*settings.particleOrbit;
+ const z=Math.sin(p.angle)*settings.particleOrbit;
+
+ const proj=project(x,p.height,z);
+
+ ctx.beginPath();
+ ctx.arc(proj.x,proj.y,settings.particleSize*proj.s*(1+highs),0,Math.PI*2);
+
+ ctx.fillStyle=`hsla(${settings.hueBase+frame*0.5},100%,70%,${settings.glow})`;
+ ctx.fill();
+
+ });
+
+ ctx.restore();
+
 }
 
 draw();

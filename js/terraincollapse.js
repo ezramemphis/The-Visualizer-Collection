@@ -1,5 +1,6 @@
 // ===============================
-// VISUALIZER B — FRACTAL TERRAIN ENGINE (STABLE EDITION)
+// VISUALIZER B — FRACTAL TERRAIN ENGINE
+// ULTRA EXPERIMENTAL EDITION
 // ===============================
 
 import { ctx, canvas, analyser, freqData, devPanelActive } from "./visualizer.js";
@@ -35,7 +36,6 @@ const settings = {
   terrainScale: 0.1,
   terrainHeight: 80,
   fractalDepth: 3,
-
   timeFlowSpeed: 0.02,
 
   lineWidthBase: 1.3,
@@ -47,10 +47,21 @@ const settings = {
   chaosNoiseStrength: 0,
 
   vortexPull: 0.0008,
-  energyDecay: 0.98,
   spiralTwist: 0.002,
-depthPulse: 0.5,
-glitchSlices: 0,
+
+  depthPulse: 0.5,
+  glitchSlices: 0,
+
+  chromaticAberration: 0,
+  scanlineIntensity: 0,
+  pixelDrift: 0,
+  feedbackAmount: 0,
+
+  kaleidoscope: 0,
+  colorChaos: 0,
+  noiseOverlay: 0,
+  cameraShake: 0
+
 };
 
 registerSceneSettings(settings);
@@ -82,7 +93,7 @@ function createDevPanel(){
     top:"5px",
     left:"5px",
     padding:"8px",
-    background:"rgba(0,0,0,0.85)",
+    background:"rgba(0,0,0,0.9)",
     color:"#fff",
     fontFamily:"sans-serif",
     fontSize:"12px",
@@ -95,25 +106,35 @@ function createDevPanel(){
 
   devPanel.innerHTML = `
   <b>DEV PANEL — FRACTAL TERRAIN</b><hr>
-  <b>MAIN</b><hr>
 
-  Terrain Scale <input type="range" id="terrainScale" class="slider-main" min="0.01" max="0.3" step="0.01"><br>
-  Terrain Height <input type="range" id="terrainHeight" class="slider-main" min="10" max="200"><br>
-  Fractal Depth <input type="range" id="fractalDepth" class="slider-main" min="1" max="8"><br>
-  Time Speed <input type="range" id="timeFlowSpeed" class="slider-main" min="0" max="0.1" step="0.001"><br>
+  Terrain Scale <input type="range" id="terrainScale" min="0.01" max="0.3" step="0.01"><br>
+  Terrain Height <input type="range" id="terrainHeight" min="10" max="200"><br>
+  Fractal Depth <input type="range" id="fractalDepth" min="1" max="8"><br>
 
-  Line Width <input type="range" id="lineWidthBase" class="slider-main" min="0.5" max="5" step="0.1"><br>
-  BG Alpha <input type="range" id="bgAlpha" class="slider-main" min="0" max="1" step="0.01"><br>
+  Time Speed <input type="range" id="timeFlowSpeed" min="0" max="0.1" step="0.001"><br>
+
+  Line Width <input type="range" id="lineWidthBase" min="0.5" max="5" step="0.1"><br>
+  BG Alpha <input type="range" id="bgAlpha" min="0" max="1" step="0.01"><br>
 
   <hr><b>EXPERIMENTAL</b><hr>
 
-  Spectral Hue Shift <input type="range" id="spectralHueShift" class="slider-exp" min="0" max="3" step="0.01"><br>
-  Bass Warp <input type="range" id="bassWarpIntensity" class="slider-exp" min="0" max="12" step="0.1"><br>
-  Chaos Noise <input type="range" id="chaosNoiseStrength" class="slider-exp" min="0" max="0.02" step="0.0005"><br>
-  Vortex Pull <input type="range" id="vortexPull" class="slider-exp" min="0" max="0.005" step="0.0001"><br>
-  Spiral Twist <input type="range" id="spiralTwist" class="slider-exp" min="0" max="0.02" step="0.0005"><br>
-    Depth Pulse <input type="range" id="depthPulse" class="slider-exp" min="0" max="3" step="0.1"><br>
-    Glitch Slices <input type="range" id="glitchSlices" class="slider-exp" min="0" max="50" step="1"><br>
+  Spectral Hue Shift <input type="range" id="spectralHueShift" min="0" max="3" step="0.01"><br>
+  Bass Warp <input type="range" id="bassWarpIntensity" min="0" max="12" step="0.1"><br>
+  Chaos Noise <input type="range" id="chaosNoiseStrength" min="0" max="0.02" step="0.0005"><br>
+
+  Spiral Twist <input type="range" id="spiralTwist" min="0" max="0.02" step="0.0005"><br>
+
+  Glitch Slices <input type="range" id="glitchSlices" min="0" max="80"><br>
+
+  Chromatic Shift <input type="range" id="chromaticAberration" min="0" max="12" step="0.1"><br>
+  Scanlines <input type="range" id="scanlineIntensity" min="0" max="1" step="0.01"><br>
+  Pixel Drift <input type="range" id="pixelDrift" min="0" max="40"><br>
+  Feedback <input type="range" id="feedbackAmount" min="0" max="0.98" step="0.01"><br>
+
+  Kaleidoscope <input type="range" id="kaleidoscope" min="0" max="1" step="1"><br>
+  Color Chaos <input type="range" id="colorChaos" min="0" max="1" step="0.01"><br>
+  Noise Overlay <input type="range" id="noiseOverlay" min="0" max="1" step="0.01"><br>
+  Camera Shake <input type="range" id="cameraShake" min="0" max="30"><br>
 
   <hr>
   Upload Background Image<br>
@@ -122,7 +143,6 @@ function createDevPanel(){
 
   document.body.appendChild(devPanel);
 
-  // Slider binding
   Object.keys(settings).forEach(key=>{
     const el = devPanel.querySelector(`#${key}`);
     if(!el) return;
@@ -134,29 +154,12 @@ function createDevPanel(){
     });
   });
 
-  // Background upload
-  const upload = devPanel.querySelector("#bgUpload");
-
-  upload.addEventListener("change", e=>{
-    const file = e.target.files[0];
-    if(!file) return;
-
-    const reader = new FileReader();
-
-    reader.onload = ev=>{
-      const img = new Image();
-      img.onload = ()=> backgroundImage = img;
-      img.src = ev.target.result;
-    };
-
-    reader.readAsDataURL(file);
-  });
 }
 
 createDevPanel();
 
 /* ======================================================
- TERRAIN ENGINE
+ DRAW LOOP
 ====================================================== */
 
 function draw(){
@@ -172,9 +175,41 @@ function draw(){
   const bass = avg(0,20);
   const high = avg(90,180);
 
-  /* Trail fade background */
+  /* feedback hallucination */
+
+  if(settings.feedbackAmount > 0){
+
+    ctx.globalAlpha = settings.feedbackAmount;
+
+    ctx.drawImage(
+      canvas,
+      Math.sin(frame*0.02)*10,
+      Math.cos(frame*0.015)*10,
+      width,
+      height
+    );
+
+    ctx.globalAlpha = 1;
+
+  }
+
+  /* fade trails */
+
   ctx.fillStyle = `rgba(0,0,0,${settings.bgAlpha})`;
   ctx.fillRect(0,0,width,height);
+
+  /* camera shake */
+
+  if(settings.cameraShake > 0){
+
+    const shake = settings.cameraShake * bass;
+
+    ctx.translate(
+      (Math.random()-0.5)*shake,
+      (Math.random()-0.5)*shake
+    );
+
+  }
 
   const grid = 120;
   const stepX = width / grid;
@@ -182,7 +217,11 @@ function draw(){
 
   ctx.save();
   ctx.translate(width/2,height/2);
-  ctx.globalCompositeOperation = "lighter";
+
+  if(bass > 0.7)
+    ctx.globalCompositeOperation = "difference";
+  else
+    ctx.globalCompositeOperation = "lighter";
 
   frame += settings.timeFlowSpeed * 100;
 
@@ -195,23 +234,22 @@ function draw(){
       const nx = x * settings.terrainScale;
       const ny = y * settings.terrainScale;
 
-      /* Harmonic wavefield */
       let field =
         Math.sin(nx + frame*settings.timeFlowSpeed) +
         Math.cos(ny + frame*0.013);
 
-      /* Fractal layering */
       let fractal = 0;
 
       for(let k=1;k<=settings.fractalDepth;k++){
+
         fractal +=
           Math.sin(nx*k*2 + frame*0.01*k) +
           Math.cos(ny*k*3 + frame*0.008*k);
+
       }
 
       fractal /= Math.max(1,settings.fractalDepth);
 
-      /* Smooth bass warp deformation */
       const radius = Math.sqrt(x*x + y*y);
 
       const bassWarp =
@@ -219,7 +257,6 @@ function draw(){
         * bass
         * settings.bassWarpIntensity;
 
-      /* Slow chaos turbulence */
       const chaos =
         (Math.sin(frame*0.003 + x*0.2 + y*0.15))
         * settings.chaosNoiseStrength * 200;
@@ -227,8 +264,8 @@ function draw(){
       const terrain =
         (field + fractal)
         * settings.terrainHeight
-        * high
-        + bassWarp
+        * (0.3 + high*1.2)
+        + bassWarp*1.4
         + chaos;
 
       const px = x*stepX;
@@ -236,6 +273,7 @@ function draw(){
 
       if(x===-grid/2) ctx.moveTo(px,py);
       else ctx.lineTo(px,py);
+
     }
 
     const hue =
@@ -251,6 +289,112 @@ function draw(){
   }
 
   ctx.restore();
+
+  /* =========================
+     GLITCH SLICES
+  ========================= */
+
+  for(let i=0;i<settings.glitchSlices;i++){
+
+    const sliceY = Math.random()*height;
+    const sliceH = Math.random()*20 + 5;
+    const shift = (Math.random()-0.5)*120;
+
+    const slice = ctx.getImageData(0,sliceY,width,sliceH);
+
+    ctx.putImageData(slice,shift,sliceY);
+
+  }
+
+  /* =========================
+     PIXEL DRIFT
+  ========================= */
+
+  if(settings.pixelDrift > 0){
+
+    for(let i=0;i<settings.pixelDrift;i++){
+
+      const y = Math.random()*height;
+
+      ctx.drawImage(
+        canvas,
+        0,y,width,1,
+        Math.sin(frame*0.05+i)*30,
+        y,
+        width,
+        1
+      );
+
+    }
+
+  }
+
+  /* =========================
+     CHROMATIC ABERRATION
+  ========================= */
+
+  if(settings.chromaticAberration > 0){
+
+    const shift = settings.chromaticAberration;
+
+    const img = ctx.getImageData(0,0,width,height);
+    const data = img.data;
+
+    for(let i=0;i<data.length;i+=4){
+
+      const x = (i/4)%width;
+
+      const offset = Math.floor(Math.sin(x*0.01+frame*0.02)*shift);
+
+      data[i] = data[i + offset*4] || data[i];
+
+    }
+
+    ctx.putImageData(img,0,0);
+
+  }
+
+  /* =========================
+     SCANLINES
+  ========================= */
+
+  if(settings.scanlineIntensity > 0){
+
+    ctx.globalCompositeOperation = "multiply";
+
+    for(let y=0;y<height;y+=2){
+
+      ctx.fillStyle =
+        `rgba(0,0,0,${settings.scanlineIntensity})`;
+
+      ctx.fillRect(0,y,width,1);
+
+    }
+
+  }
+
+  /* =========================
+     NOISE OVERLAY
+  ========================= */
+
+  if(settings.noiseOverlay > 0){
+
+    for(let i=0;i<2000;i++){
+
+      ctx.fillStyle =
+        `rgba(255,255,255,${Math.random()*settings.noiseOverlay})`;
+
+      ctx.fillRect(
+        Math.random()*width,
+        Math.random()*height,
+        1,
+        1
+      );
+
+    }
+
+  }
+
 }
 
 draw();

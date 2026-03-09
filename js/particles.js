@@ -1,120 +1,295 @@
-import { ctx, canvas, analyser, freqData } from "./visualizer.js";
+import { ctx, canvas, analyser, freqData, devPanelActive } from "./visualizer.js";
 
-/* ===============================
-   MAGICAL AMPLITUDE-REACTIVE FLOW
-================================ */
-
-const POINTS = 800;
-const points = [];
+/* ======================================================
+ALT / VIS — CHAOTIC AUDIO ORGANISM
+completely new particle architecture
+====================================================== */
 
 let frame = 0;
 
-// helper: compute RMS amplitude
-function rmsEnergy() {
-  let sum = 0;
-  for (let i = 0; i < freqData.length; i++) {
-    const v = freqData[i] / 255;
-    sum += v * v;
-  }
-  return Math.sqrt(sum / freqData.length);
-}
+let width = canvas.width;
+let height = canvas.height;
 
-for (let i = 0; i < POINTS; i++) {
-  points.push({
-    x: Math.random() * canvas.width,
-    y: Math.random() * canvas.height,
-    vx: 0,
-    vy: 0,
-    band: Math.floor(Math.random() * 64),
-    phase: Math.random() * Math.PI * 2
-  });
-}
+window.addEventListener("resize", () => {
+  width = canvas.width;
+  height = canvas.height;
+});
 
-function bandEnergy(i) {
+/* ======================================================
+SETTINGS
+====================================================== */
+
+const settings = {
+
+particles: 1400,
+
+baseSpeed: 0.6,
+orbitForce: 1.4,
+turbulence: 1.2,
+bassExplosion: 4,
+
+trailFade: 0.05,
+lineWidth: 1.1,
+
+hueSpeed: 0.4,
+
+};
+
+/* ======================================================
+AUDIO
+====================================================== */
+
+function band(i){
   return freqData[i] / 255;
 }
 
-function wrap(p) {
-  if (p.x < 0) p.x += canvas.width;
-  if (p.x > canvas.width) p.x -= canvas.width;
-  if (p.y < 0) p.y += canvas.height;
-  if (p.y > canvas.height) p.y -= canvas.height;
-}
+function rms(){
 
-/* ===============================
-   DRAW LOOP
-================================ */
+  let s=0;
 
-export function draw() {
-  requestAnimationFrame(draw);
-  analyser.getByteFrequencyData(freqData);
-  frame++;
-
-  const amp = rmsEnergy(); // 0-1
-
-  // fade trails slowly (~10 seconds)
-  const fadeAlpha = 0.04 * amp + 0.01; // higher amp slightly quicker fade
-  ctx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  const cx = canvas.width / 2;
-  const cy = canvas.height / 2;
-
-  for (let p of points) {
-    const e = bandEnergy(p.band);
-
-    // amplitude-driven force
-    const ampForce = 0.5 + amp * 1.2;
-
-    // gentle swirl / field
-    const dx = p.x - cx;
-    const dy = p.y - cy;
-    const dist = Math.sqrt(dx * dx + dy * dy) + 0.0001;
-
-    const angle =
-      Math.atan2(dy, dx) +
-      Math.sin(frame * 0.003 + p.phase) * e * 1.5;
-
-    const force =
-      (0.05 + e * 0.8) * ampForce *
-      (0.5 + Math.sin(dist * 0.005 + frame * 0.002));
-
-    p.vx += Math.cos(angle) * force;
-    p.vy += Math.sin(angle) * force;
-
-    // damping (slightly less with amplitude to feel energetic)
-    const damp = lerp(0.93, 0.87, amp);
-    p.vx *= damp;
-    p.vy *= damp;
-
-    const ox = p.x;
-    const oy = p.y;
-
-    p.x += p.vx;
-    p.y += p.vy;
-
-    wrap(p);
-
-    // particle stroke
-    const speed = Math.hypot(p.vx, p.vy);
-    const hue =
-      190 + p.band * 1.5 + Math.sin(frame * 0.01 + p.phase) * 20 + amp * 80; // amp shifts colors
-
-    const alpha = Math.min(0.25, speed * 0.08 + e * 0.05 + amp * 0.1); // amp brightens trails
-
-    ctx.strokeStyle = `hsla(${hue},90%,60%,${alpha})`;
-    ctx.lineWidth = 1 + amp * 1.5; // stroke grows with amplitude
-
-    ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    ctx.lineTo(p.x, p.y);
-    ctx.stroke();
+  for(let i=0;i<freqData.length;i++){
+    let v=freqData[i]/255;
+    s+=v*v;
   }
+
+  return Math.sqrt(s/freqData.length);
+
 }
 
-// linear interpolate helper
-function lerp(a, b, t) {
-  return a + (b - a) * t;
+function bass(){ return band(5); }
+function mids(){ return band(40); }
+function highs(){ return band(120); }
+
+/* ======================================================
+PARTICLE SYSTEM
+====================================================== */
+
+let particles = [];
+let attractors = [];
+
+function init(){
+
+particles=[];
+attractors=[];
+
+/* particles */
+
+for(let i=0;i<settings.particles;i++){
+
+particles.push({
+
+x:Math.random()*width,
+y:Math.random()*height,
+
+vx:0,
+vy:0,
+
+life:Math.random()*100,
+
+band:Math.floor(Math.random()*120),
+
+});
+
+}
+
+/* moving attractors */
+
+for(let i=0;i<5;i++){
+
+attractors.push({
+
+x:Math.random()*width,
+y:Math.random()*height,
+
+phase:Math.random()*10
+
+});
+
+}
+
+}
+
+init();
+
+/* ======================================================
+DEV PANEL
+====================================================== */
+
+let panel = document.createElement("div");
+
+Object.assign(panel.style,{
+position:"fixed",
+top:"10px",
+left:"10px",
+background:"rgba(0,0,0,0.85)",
+color:"#fff",
+padding:"10px",
+fontFamily:"monospace",
+fontSize:"12px",
+borderRadius:"6px",
+zIndex:9999,
+maxHeight:"90vh",
+overflowY:"auto",
+display:"none"
+});
+
+panel.innerHTML=`
+
+<b>CHAOTIC AUDIO ORGANISM</b><hr>
+
+Particles <input id="particles" type="range" min="200" max="4000"><br>
+
+Base Speed <input id="baseSpeed" type="range" min="0" max="3" step="0.1"><br>
+
+Orbit Force <input id="orbitForce" type="range" min="0" max="4" step="0.1"><br>
+
+Turbulence <input id="turbulence" type="range" min="0" max="4" step="0.1"><br>
+
+Bass Explosion <input id="bassExplosion" type="range" min="0" max="10" step="0.2"><br>
+
+Trail Fade <input id="trailFade" type="range" min="0.005" max="0.2" step="0.005"><br>
+
+Line Width <input id="lineWidth" type="range" min="0.1" max="4" step="0.1"><br>
+
+Hue Speed <input id="hueSpeed" type="range" min="0" max="2" step="0.01"><br>
+
+`;
+
+document.body.appendChild(panel);
+
+Object.keys(settings).forEach(key=>{
+
+let el = panel.querySelector("#"+key);
+if(!el) return;
+
+el.value=settings[key];
+
+el.addEventListener("input",e=>{
+
+settings[key]=parseFloat(e.target.value);
+
+if(key==="particles") init();
+
+});
+
+});
+
+/* ======================================================
+DRAW LOOP
+====================================================== */
+
+function draw(){
+
+requestAnimationFrame(draw);
+
+frame++;
+
+panel.style.display = devPanelActive ? "block" : "none";
+
+analyser.getByteFrequencyData(freqData);
+
+let amp = rms();
+let b = bass();
+let m = mids();
+let h = highs();
+
+/* background fade */
+
+ctx.fillStyle=`rgba(0,0,0,${settings.trailFade})`;
+ctx.fillRect(0,0,width,height);
+
+/* move attractors */
+
+for(let a of attractors){
+
+a.x += Math.sin(frame*0.01+a.phase)*2;
+a.y += Math.cos(frame*0.008+a.phase)*2;
+
+}
+
+/* particle simulation */
+
+for(let p of particles){
+
+let ox=p.x;
+let oy=p.y;
+
+/* orbit attractors */
+
+for(let a of attractors){
+
+let dx=a.x-p.x;
+let dy=a.y-p.y;
+
+let dist=Math.sqrt(dx*dx+dy*dy)+0.01;
+
+let force=settings.orbitForce/dist;
+
+p.vx += dx*force*0.02;
+p.vy += dy*force*0.02;
+
+}
+
+/* turbulence field */
+
+p.vx += Math.sin(p.y*0.01+frame*0.02)*settings.turbulence*m;
+p.vy += Math.cos(p.x*0.01+frame*0.02)*settings.turbulence*m;
+
+/* bass explosion */
+
+let cx=width/2;
+let cy=height/2;
+
+let dx=p.x-cx;
+let dy=p.y-cy;
+
+let dist=Math.sqrt(dx*dx+dy*dy)+0.01;
+
+p.vx += dx/dist * b * settings.bassExplosion;
+p.vy += dy/dist * b * settings.bassExplosion;
+
+/* treble sparks */
+
+p.vx += (Math.random()-0.5)*h*2;
+p.vy += (Math.random()-0.5)*h*2;
+
+/* integrate */
+
+p.vx*=0.94;
+p.vy*=0.94;
+
+p.x+=p.vx*settings.baseSpeed;
+p.y+=p.vy*settings.baseSpeed;
+
+/* wrap */
+
+if(p.x<0)p.x+=width;
+if(p.x>width)p.x-=width;
+if(p.y<0)p.y+=height;
+if(p.y>height)p.y-=height;
+
+/* color */
+
+let hue=
+(frame*settings.hueSpeed+
+p.band*3+
+amp*200)%360;
+
+let alpha=Math.min(0.5,0.08+amp*0.4);
+
+/* draw */
+
+ctx.strokeStyle=`hsla(${hue},100%,60%,${alpha})`;
+
+ctx.lineWidth=settings.lineWidth+amp*2;
+
+ctx.beginPath();
+ctx.moveTo(ox,oy);
+ctx.lineTo(p.x,p.y);
+ctx.stroke();
+
+}
+
 }
 
 draw();
