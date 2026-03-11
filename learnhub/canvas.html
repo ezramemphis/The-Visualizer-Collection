@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 1: Canvas Setup</title>
+  <link rel="stylesheet" href="learn.css">
+  <style>
+    /* Arrow pointing to the canvas */
+    .canvas-arrow {
+      position: relative;
+      width: 0;
+      margin: 0 auto 10px auto;
+      text-align: center;
+    }
+
+    .canvas-arrow::before {
+      content: "⬇ This is the Canvas. We're making this ⬇";
+      color: rgb(175, 196, 196);
+      font-weight: bold;
+      font-size: 1rem;
+      text-shadow: 0 0 5px #0ff8aa;
+      transform: translateX(-50%);
+      width: 500px;
+      display: block;
+      margin-bottom: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Lesson 1: Setting Up the Canvas</h1>
+
+  <!-- Arrow pointing to the canvas -->
+  <div class="canvas-arrow"></div>
+
+  <!-- Canvas for visualization -->
+  <canvas id="canvas" width="600" height="400"></canvas>
+
+  <!-- Step-by-step lesson explanation -->
+  <div class="lesson-info">
+    <h2>Getting Started with the Canvas</h2>
+
+    <br>
+
+    <h3>Step 1: Add the Canvas to HTML</h3>
+    <p>
+      The <code>&lt;canvas&gt;</code> element is where all our drawing will happen. 
+      Here we give it a width and height so it has a visible space on the page.
+      Think of it as an empty blackboard where your visualizer will be drawn.
+    </p>
+    <pre><code>&lt;canvas id="canvas" width="600" height="400"&gt;&lt;/canvas&gt;</code></pre>
+
+    <h3>Step 2: Include CSS for Canvas</h3>
+    <p>
+      We style the canvas to look nice and visually stand out. A border, shadow, and background color make it clear where the drawing will happen. Although technically not necessary, especially if you intend the canvas to fill the entire screen, but it's good to know.
+    </p>
+    <pre><code>canvas {
+  display: block;
+  background: #000;
+  margin: 20px auto;
+  border: 2px solid #0ff;
+  box-shadow: 0 0 30px #0ff88aa;
+  border-radius: 12px;
+}</code></pre>
+
+    <h3>Step 3: Grab the Canvas in JavaScript</h3>
+    <p>
+      To start drawing, we need the canvas in our JavaScript. We grab it using <code>document.getElementById</code> 
+      and then get its 2D context with <code>getContext('2d')</code>. This context is like a pen for the canvas.
+    </p>
+    <pre><code>const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');</code></pre>
+
+    <h3>Step 4: Set Up for Future Drawing</h3>
+    <p>
+      Even though we won’t draw anything yet, it’s good to define variables for future use, like the grid size or animation settings. 
+      This helps beginners understand how to structure code for interactivity later.
+    </p>
+    <pre><code>let grid = 10;  // Number of cells (we'll use this in Lesson 2)
+let showLines = false;  // Optional toggle for connecting lines</code></pre>
+
+    <h3>Step 5: Structure Your HTML for UI Controls</h3>
+    <p>
+      Even though we’re not making interactive sliders yet, it’s helpful to leave space in the HTML for them. 
+      This teaches beginners good page structure for future visualizers.
+    </p>
+    <pre><code>&lt;div class="ui"&gt;
+  &lt;!-- Slider or buttons will go here in future lessons --&gt;
+&lt;/div&gt;</code></pre>
+  </div>
+
+  <!-- JS -->
+  <script type="module">
+    // Grab the canvas and prepare it for drawing
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Placeholder variables for future lessons
+    let grid = 10;          // Number of cells
+    let showLines = false;  // Whether to draw connecting lines
+  </script>
+</body>
+</html>

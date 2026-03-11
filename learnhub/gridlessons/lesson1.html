@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Lesson 1: Simple Grid</title>
+<link rel="stylesheet" href="../learn.css">
+
+<style>
+
+/* layout for canvas + code */
+.visual-row{
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
+  gap:40px;
+  margin-bottom:20px;
+}
+
+/* live code panel */
+.live-code{
+  background:#111;
+  border:1px solid #0ff33a;
+  border-radius:12px;
+  padding:18px;
+  font-family:'Fira Code', monospace;
+  color:#0ff;
+  box-shadow:0 0 20px #0ff33a;
+  min-width:300px;
+}
+
+.live-code span{
+  color:#7ff;
+  font-weight:bold;
+  transition:.2s;
+}
+
+/* glow animation when value changes */
+.changed{
+  text-shadow:0 0 10px #0ff;
+  transform:scale(1.2);
+}
+
+</style>
+
+</head>
+<body>
+
+<h1>Lesson 1: Simple Grid</h1>
+
+<div class="visual-row">
+
+  <!-- Canvas -->
+  <canvas id="canvas" width="600" height="400"></canvas>
+
+  <!-- Live JS Code -->
+  <div class="live-code">
+<pre>
+let grid = <span id="codeGrid">10</span>
+
+const stepX = canvas.width / grid
+const stepY = canvas.height / grid
+
+for(let x = 0; x &lt; grid; x++){
+  for(let y = 0; y &lt; grid; y++){
+    ctx.fillRect(x*stepX, y*stepY, 4, 4)
+  }
+}
+</pre>
+  </div>
+
+</div>
+
+<div class="shape-ui">
+  <label>Dot Shape:</label>
+
+  <select id="shapeSelect">
+    <option value="square">Squares</option>
+    <option value="circle">Circles</option>
+    <option value="triangle">Triangles</option>
+    <option value="diamond">Diamonds</option>
+    <option value="star">Stars ✦</option>
+  </select>
+</div>
+
+
+<!-- Slider + checkbox -->
+<div class="ui">
+<div style="display:flex;align-items:center;gap:20px;">
+
+<div>
+<label>Grid Size: <span id="gridVal">10</span></label>
+<input type="range" id="gridSize" min="2" max="50" value="10">
+</div>
+
+<div>
+<label><input type="checkbox" id="showLines"> Show connecting lines</label>
+</div>
+
+</div>
+</div>
+
+
+<div class="lesson-info">
+
+<h2>Learning How This Visualizer Works</h2>
+
+<h3>Step 1: Just the Canvas</h3>
+
+<p>
+First, we grab the <code>&lt;canvas&gt;</code> element and its 2D drawing context (<code>ctx</code>).
+Think of <code>ctx</code> as our “pen” that can draw on the canvas.
+</p>
+
+<pre><code>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+</code></pre>
+
+<h3>Step 2: Loop to Create a Grid</h3>
+
+<p>
+To make the dots appear, we repeat a small drawing command many times using two loops.
+The first loop moves across the canvas from left to right (the <code>x</code> direction), and
+the second loop moves from top to bottom (the <code>y</code> direction). Together these loops
+visit every position in a grid.
+</p>
+
+<p>
+For each position, we calculate where the dot should go using
+<code>x * stepX</code> and <code>y * stepY</code>. These values spread the dots evenly across the canvas.
+Finally, we use <code>ctx.fillRect()</code> to draw a tiny 4×4 square at that location.
+Because this happens many times in the loops, lots of tiny squares appear, which look like a grid of dots.
+</p>
+
+<pre><code>
+for(let x = 0; x < grid; x++){
+  for(let y = 0; y < grid; y++){
+
+    // calculate the position
+    const posX = x * stepX
+    const posY = y * stepY
+
+    // draw a tiny square (our "dot")
+    ctx.fillRect(posX, posY, 4, 4)
+
+  }
+}
+</code></pre>
+
+<h3>Step 3: Watch the Code Change</h3>
+
+<p>
+Move the slider and watch the <b>grid variable update in the code panel</b>.
+This is the exact number controlling how many squares appear.
+</p>
+
+<h3>Step 4: Changing the Shape of the Dots</h3>
+
+<p>
+Right now every point in the grid could be drawn the same way, but we made the visualizer more interactive by allowing the user to choose what shape each dot should be. This is done using the dropdown menu. When the dropdown changes, JavaScript listens for that event and updates a variable called <code>shape</code>.
+</p>
+
+<p>
+Instead of drawing squares directly inside the loop, the program calls a helper function called <code>drawShape()</code>. This function receives the position of the dot and decides what shape to draw depending on the value stored in <code>shape</code>. A <code>switch</code> statement is used so the program can easily choose between squares, circles, triangles, and other shapes.
+</p>
+
+<pre><code>
+shapeSelect.addEventListener("change", () => {
+
+  shape = shapeSelect.value
+  draw()
+
+})
+</code></pre>
+
+<pre><code>
+function drawShape(x,y,size){
+
+  switch(shape){
+
+    case "square":
+      ctx.fillRect(x,y,size,size)
+    break
+
+    case "circle":
+      ctx.beginPath()
+      ctx.arc(x+size/2,y+size/2,size/2,0,Math.PI*2)
+      ctx.fill()
+    break
+
+  }
+
+}
+</code></pre>
+
+
+<h3>Step 5: Drawing the Connecting Lines</h3>
+
+<p>
+The connecting lines are controlled by a checkbox. When the checkbox is turned on, the program draws lines between neighboring points in the grid. We first check whether the checkbox is active using <code>checkbox.checked</code>. If it is true, we run the code that draws the lines.
+</p>
+
+<p>
+To connect the grid points, the program uses two sets of loops. The first set draws horizontal lines between dots from left to right. The second set draws vertical lines connecting dots from top to bottom. Together these loops create a grid-like network that reveals the structure of the points.
+</p>
+
+<pre><code>
+if(checkbox.checked){
+
+  ctx.strokeStyle = "#0ff55a"
+  ctx.lineWidth = 0.5
+  ctx.beginPath()
+
+  for(let y=0;y<grid;y++){
+    for(let x=0;x<grid-1;x++){
+
+      ctx.moveTo(x*stepX+3,y*stepY+3)
+      ctx.lineTo((x+1)*stepX+3,y*stepY+3)
+
+    }
+  }
+
+  for(let x=0;x<grid;x++){
+    for(let y=0;y<grid-1;y++){
+
+      ctx.moveTo(x*stepX+3,y*stepY+3)
+      ctx.lineTo(x*stepX+3,(y+1)*stepY+3)
+
+    }
+  }
+
+  ctx.stroke()
+
+}
+</code></pre>
+
+</div>
+
+
+<script>
+
+const canvas = document.getElementById("canvas")
+const ctx = canvas.getContext("2d")
+
+const slider = document.getElementById("gridSize")
+const gridVal = document.getElementById("gridVal")
+const codeGrid = document.getElementById("codeGrid")
+
+const checkbox = document.getElementById("showLines")
+const shapeSelect = document.getElementById("shapeSelect")
+
+let grid = 10
+let shape = "square"
+
+slider.addEventListener("input", () => {
+
+  grid = Number(slider.value)
+
+  gridVal.textContent = grid
+  codeGrid.textContent = grid
+
+  codeGrid.classList.add("changed")
+  setTimeout(()=>codeGrid.classList.remove("changed"),200)
+
+  draw()
+
+})
+
+checkbox.addEventListener("change", draw)
+
+shapeSelect.addEventListener("change", () => {
+
+  shape = shapeSelect.value
+  draw()
+
+})
+
+function draw(){
+
+  ctx.clearRect(0,0,canvas.width,canvas.height)
+
+  const stepX = canvas.width / grid
+  const stepY = canvas.height / grid
+
+  ctx.fillStyle = "#0f0"
+
+  for(let x=0;x<grid;x++){
+    for(let y=0;y<grid;y++){
+
+      const posX = x * stepX
+      const posY = y * stepY
+
+      drawShape(posX,posY,6)
+
+    }
+  }
+
+  if(checkbox.checked){
+
+    ctx.strokeStyle = "#0ff55a"
+    ctx.lineWidth = 0.5
+    ctx.beginPath()
+
+    for(let y=0;y<grid;y++){
+      for(let x=0;x<grid-1;x++){
+
+        ctx.moveTo(x*stepX+3,y*stepY+3)
+        ctx.lineTo((x+1)*stepX+3,y*stepY+3)
+
+      }
+    }
+
+    for(let x=0;x<grid;x++){
+      for(let y=0;y<grid-1;y++){
+
+        ctx.moveTo(x*stepX+3,y*stepY+3)
+        ctx.lineTo(x*stepX+3,(y+1)*stepY+3)
+
+      }
+    }
+
+    ctx.stroke()
+
+  }
+
+}
+
+function drawShape(x,y,size){
+
+  switch(shape){
+
+    case "square":
+
+      ctx.fillRect(x,y,size,size)
+
+    break
+
+    case "circle":
+
+      ctx.beginPath()
+      ctx.arc(x+size/2,y+size/2,size/2,0,Math.PI*2)
+      ctx.fill()
+
+    break
+
+    case "triangle":
+
+      ctx.beginPath()
+      ctx.moveTo(x+size/2,y)
+      ctx.lineTo(x,y+size)
+      ctx.lineTo(x+size,y+size)
+      ctx.closePath()
+      ctx.fill()
+
+    break
+
+    case "diamond":
+
+      ctx.beginPath()
+      ctx.moveTo(x+size/2,y)
+      ctx.lineTo(x+size,y+size/2)
+      ctx.lineTo(x+size/2,y+size)
+      ctx.lineTo(x,y+size/2)
+      ctx.closePath()
+      ctx.fill()
+
+    break
+
+    case "star":
+
+      const cx = x + size/2
+      const cy = y + size/2
+      const spikes = 5
+      const outer = size/2
+      const inner = size/4
+
+      let rot = Math.PI/2 * 3
+      let step = Math.PI/spikes
+
+      ctx.beginPath()
+      ctx.moveTo(cx,cy-outer)
+
+      for(let i=0;i<spikes;i++){
+
+        ctx.lineTo(
+          cx + Math.cos(rot)*outer,
+          cy + Math.sin(rot)*outer
+        )
+
+        rot += step
+
+        ctx.lineTo(
+          cx + Math.cos(rot)*inner,
+          cy + Math.sin(rot)*inner
+        )
+
+        rot += step
+
+      }
+
+      ctx.closePath()
+      ctx.fill()
+
+    break
+
+  }
+
+}
+
+draw()
+
+</script>
+
+</body>
+</html>

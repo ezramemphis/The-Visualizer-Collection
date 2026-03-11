@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 3: Colorful Grid</title>
+  <link rel="stylesheet" href="learn.css">
+</head>
+<body>
+  <h1>Lesson 3: Colorful Grid Patterns</h1>
+
+  <canvas id="canvas" width="600" height="400"></canvas>
+
+  <div class="ui">
+    <label>Grid Size: <span id="gridVal">10</span></label>
+    <input type="range" id="gridSize" min="2" max="50" value="10">
+  </div>
+
+  <div class="lesson-info">
+    <h2>Step 1: Add Colors!</h2>
+    <p>We can use <code>ctx.fillStyle</code> to set different colors for each square. Let’s make a gradient across the grid.</p>
+  </div>
+
+  <script type="module">
+    import { setupSlider } from './learn.js';
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let grid = 10;
+
+    setupSlider('gridSize', val => {
+      grid = val;
+      document.getElementById('gridVal').textContent = val;
+      draw();
+    });
+
+    function draw(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const stepX = canvas.width / grid;
+      const stepY = canvas.height / grid;
+
+      for(let x=0;x<grid;x++){
+        for(let y=0;y<grid;y++){
+          const hue = Math.floor((x+y)/(grid*2) * 360);
+          ctx.fillStyle = `hsl(${hue}, 80%, 50%)`;
+          ctx.fillRect(x*stepX, y*stepY, 8, 8);
+        }
+      }
+    }
+
+    draw();
+  </script>
+</body>
+</html>

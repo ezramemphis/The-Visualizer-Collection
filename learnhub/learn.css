@@ -1,0 +1,185 @@
+/* =============================
+   Global Body + Typography
+============================= */
+body {
+  margin: 0;
+  font-family: 'Fira Sans', sans-serif;
+  background: #111;
+  color: #eee;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+h1 {
+  font-size: 2.5rem;
+  text-align: center;
+  margin-bottom: 20px;
+  color: #4eacd7;
+  text-shadow: 0 0 6px #0ff66a66;
+}
+
+p {
+  text-align: left;
+  line-height: 1.6;
+  font-size: 1rem;
+  color: #ddd;
+}
+
+/* =============================
+   Canvas Styling
+============================= */
+canvas {
+  display: block;
+  background: #000;
+  margin: 20px 0;
+  border: 2px solid #1f1d1a;
+  border-radius: 12px;
+  box-shadow: 0 0 20px #d9d9ca66;
+}
+
+/* =============================
+   Slider / UI Styling
+============================= */
+.ui {
+  margin: 15px 0;
+  background: rgba(0, 255, 255, 0.05);
+  padding: 15px 25px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+label {
+  font-weight: 600;
+  margin-bottom: 8px;
+  font-size: 1.1rem;
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  width: 300px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #347bba, #00aaff);
+  outline: none;
+  transition: background 0.3s;
+  cursor: pointer;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #347bba;
+  border-radius: 50%;
+  border: 2px solid #00aaff;
+  box-shadow: 0 0 8px #0ff66a66;
+  transition: transform 0.2s, background 0.2s;
+}
+
+input[type=range]:active::-webkit-slider-thumb {
+  transform: scale(1.2);
+  background: #0ff88b;
+}
+
+/* Firefox */
+input[type=range]::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: #347bba;
+  border-radius: 50%;
+  border: 2px solid #00aaff;
+  box-shadow: 0 0 8px #0ff66a66;
+  transition: transform 0.2s, background 0.2s;
+}
+
+input[type=range]:active::-moz-range-thumb {
+  transform: scale(1.2);
+  background: #0ff88b;
+}
+
+/* =============================
+   Lesson Info Styling
+============================= */
+.lesson-info {
+  max-width: 800px;
+  margin: 20px;
+  background: rgba(25, 25, 25, 0.95);
+  padding: 25px 35px;
+  border-radius: 16px;
+  border-left: 6px solid #2f6984;
+  box-shadow: 0 4px 20px rgba(0, 255, 255, 0.1);
+}
+
+.lesson-info h2 {
+  text-align: center;
+  color: rgb(198, 211, 221);
+  font-size: 2rem;
+  margin-bottom: 20px;
+  text-shadow: 0 0 4px #0ff88a;
+}
+
+.lesson-info h3 {
+  color: #347bba;
+  font-size: 1.4rem;
+  margin-top: 20px;
+  margin-bottom: 10px;
+}
+
+.lesson-info pre {
+  background: #111;
+  padding: 15px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.95rem;
+  color: #2f6984;
+  border: 1px solid #0ff44a;
+  box-shadow: 0 0 6px #0ff33a;
+}
+
+.lesson-info code {
+  color: #347bba;
+  font-family: 'Fira Code', monospace;
+}
+
+/* =============================
+   Responsive tweaks
+============================= */
+@media screen and (max-width: 700px) {
+  canvas {
+    width: 90%;
+    height: auto;
+  }
+  input[type=range] {
+    width: 90%;
+  }
+  .lesson-info {
+    padding: 20px;
+    margin: 10px;
+  }
+}
+
+
+.shape-ui{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:12px;
+  margin-bottom:14px;
+  font-family:monospace;
+  color:#7ff;
+}
+
+.shape-ui select{
+  background:#111;
+  border:1px solid #0ff33a;
+  color:#7ff;
+  padding:6px 10px;
+  border-radius:6px;
+}

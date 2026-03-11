@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 1: Simple Grid</title>
+  <link rel="stylesheet" href="learn.css">
+</head>
+<body>
+  <h1>Lesson 1: Simple Grid</h1>
+  <canvas id="canvas" width="600" height="400"></canvas>
+  
+  <div class="ui">
+    <label>Grid Size: <span id="gridVal">10</span></label>
+    <input type="range" id="gridSize" min="2" max="50" value="10">
+  </div>
+
+  <script type="module">
+    import { setupSlider } from './learn.js';
+
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let grid = 10;
+
+    setupSlider('gridSize', val=>{
+      grid = val;
+      document.getElementById('gridVal').textContent = val;
+      draw();
+    });
+
+    function draw(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const stepX = canvas.width / grid;
+      const stepY = canvas.height / grid;
+
+      ctx.fillStyle = '#0f0';
+      for(let x=0;x<grid;x++){
+        for(let y=0;y<grid;y++){
+          ctx.fillRect(x*stepX, y*stepY, 4, 4);
+        }
+      }
+    }
+
+    draw();
+  </script>
+</body>
+</html>

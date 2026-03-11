@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Spectrum Grid</title>
+  <link rel="stylesheet" href="visualizer.css" />
+</head>
+<body>
+
+  <canvas id="viz"></canvas>
+
+  <div class="ui">
+    <div class="meta">
+      <img id="cover" />
+      <div>
+        <div id="title">Drop Audio File</div>
+        <div id="artist"></div>
+        <div id="album"></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button id="play">PLAY</button>
+      <input
+        id="progress"
+        type="range"
+        min="0"
+        max="1"
+        step="0.001"
+      />
+    </div>
+  </div>
+
+  <input id="fileInput" type="file" accept="audio/*" hidden />
+
+  <!-- metadata library (global) -->
+  <script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.5/dist/jsmediatags.min.js"></script>
+
+  <!-- shared audio + canvas engine -->
+  <script type="module" src="../js/visualizer.js"></script>
+
+  <!-- spectrum visualizer ONLY -->
+  <script type="module" src="../js/sphere.js"></script>
+
+</body>
+</html>

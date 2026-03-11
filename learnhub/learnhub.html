@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Visualizer Learn Hub</title>
+<link rel="stylesheet" href="learn.css">
+
+<style>
+
+/* Page layout */
+
+body{
+  margin:0;
+  font-family:system-ui, -apple-system, sans-serif;
+  background:#050505;
+  color:white;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+}
+
+/* Title */
+
+.hero{
+  text-align:center;
+  margin-top:80px;
+  margin-bottom:60px;
+}
+
+.hero h1{
+  font-size:48px;
+  letter-spacing:2px;
+  margin-bottom:10px;
+  background:linear-gradient(90deg,#0ff,#0f0);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+}
+
+.hero p{
+  color:#aaa;
+  font-size:18px;
+}
+
+/* course grid */
+
+.course-grid{
+  width:1000px;
+  max-width:95%;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+  gap:25px;
+  margin-bottom:80px;
+}
+
+/* course card */
+
+.course-card{
+  background:#111;
+  border:1px solid #1a1a1a;
+  border-radius:14px;
+  padding:25px;
+  text-decoration:none;
+  color:white;
+  transition:.25s;
+  position:relative;
+  overflow:hidden;
+}
+
+/* glow effect */
+
+.course-card::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:radial-gradient(circle at 50% 0%, #0ff33a20, transparent 70%);
+  opacity:0;
+  transition:.3s;
+}
+
+.course-card:hover::before{
+  opacity:1;
+}
+
+.course-card:hover{
+  transform:translateY(-0px);
+  border-color:#0ff33a;
+  box-shadow:0 0 30px #0ff33a30;
+}
+
+/* card content */
+
+.course-number{
+  font-size:13px;
+  color:#0ff33a;
+  letter-spacing:2px;
+  margin-bottom:8px;
+}
+
+.course-title{
+  font-size:22px;
+  margin-bottom:8px;
+}
+
+.course-desc{
+  font-size:14px;
+  color:#aaa;
+  line-height:1.4;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="hero">
+
+<h1>Visualizer Learn Hub</h1>
+<p>Step-by-step lessons to learn creative coding and visualizers from scratch.</p>
+
+</div>
+
+<div class="course-grid">
+
+<!-- Generate 20 course cards -->
+<a class="course-card" href="gridlessons.html">
+  <div class="course-number">COURSE 01</div>
+  <div class="course-title">Simple Grid</div>
+  <div class="course-desc">Learn how to draw evenly spaced points using loops and the HTML canvas.</div>
+</a>
+
+<a class="course-card" href="movingshapeslessons.html">
+  <div class="course-number">COURSE 02</div>
+  <div class="course-title">Moving Shapes</div>
+  <div class="course-desc">Animate shapes and introduce frame updates using JavaScript.</div>
+</a>
+
+<a class="course-card" href="sinewavelessons.html">
+  <div class="course-number">COURSE 03</div>
+  <div class="course-title">Sine Wave Line</div>
+  <div class="course-desc">Use trigonometry to generate flowing animated waves.</div>
+</a>
+
+<a class="course-card" href="polarcoordslessons.html">
+  <div class="course-number">COURSE 04</div>
+  <div class="course-title">Polar Coordinates</div>
+  <div class="course-desc">Switch from Cartesian space to circular motion and radial visualizers.</div>
+</a>
+
+<a class="course-card" href="colormappinglessons.html">
+  <div class="course-number">COURSE 05</div>
+  <div class="course-title">Color Mapping</div>
+  <div class="course-desc">Map numbers to color gradients to create rich visuals.</div>
+</a>
+
+<a class="course-card" href="particleslessons.html">
+  <div class="course-number">COURSE 06</div>
+  <div class="course-title">Particles</div>
+  <div class="course-desc">Create dynamic particles with motion, acceleration, and randomness.</div>
+</a>
+
+<a class="course-card" href="interactivitylessons.html">
+  <div class="course-number">COURSE 07</div>
+  <div class="course-title">Interactivity</div>
+  <div class="course-desc">Learn to make visuals respond to mouse and keyboard events.</div>
+</a>
+
+<a class="course-card" href="audioinputlessons.html">
+  <div class="course-number">COURSE 08</div>
+  <div class="course-title">Audio Input</div>
+  <div class="course-desc">Visualize live audio input using the Web Audio API.</div>
+</a>
+
+<a class="course-card" href="waveformlessons.html">
+  <div class="course-number">COURSE 09</div>
+  <div class="course-title">Waveforms</div>
+  <div class="course-desc">Display audio waveforms in real-time with smoothing and scaling.</div>
+</a>
+
+<a class="course-card" href="fftlessons.html">
+  <div class="course-number">COURSE 10</div>
+  <div class="course-title">FFT & Frequency Analysis</div>
+  <div class="course-desc">Break audio into frequencies for advanced visualization techniques.</div>
+</a>
+
+<a class="course-card" href="gradientlessons.html">
+  <div class="course-number">COURSE 11</div>
+  <div class="course-title">Gradients</div>
+  <div class="course-desc">Use color gradients to add depth and style to your visuals.</div>
+</a>
+
+<a class="course-card" href="shapelayerslessons.html">
+  <div class="course-number">COURSE 12</div>
+  <div class="course-title">Shape Layers</div>
+  <div class="course-desc">Combine multiple shapes and layers for complex visuals.</div>
+</a>
+
+<a class="course-card" href="trailslessons.html">
+  <div class="course-number">COURSE 13</div>
+  <div class="course-title">Trails & Motion Blur</div>
+  <div class="course-desc">Add motion blur and trail effects for smooth animations.</div>
+</a>
+
+<a class="course-card" href="particlesystemlessons.html">
+  <div class="course-number">COURSE 14</div>
+  <div class="course-title">Particle Systems</div>
+  <div class="course-desc">Learn modular particle systems with emitters and behaviors.</div>
+</a>
+
+<a class="course-card" href="noisevisualslessons.html">
+  <div class="course-number">COURSE 15</div>
+  <div class="course-title">Noise Visuals</div>
+  <div class="course-desc">Generate smooth noise-based patterns using Perlin and Simplex noise.</div>
+</a>
+
+<a class="course-card" href="physicslessons.html">
+  <div class="course-number">COURSE 16</div>
+  <div class="course-title">Physics</div>
+  <div class="course-desc">Add forces like gravity, collisions, and springs to your visuals.</div>
+</a>
+
+<a class="course-card" href="timelineslessons.html">
+  <div class="course-number">COURSE 17</div>
+  <div class="course-title">Timelines</div>
+  <div class="course-desc">Control animations over time with easy-to-use timelines.</div>
+</a>
+
+<a class="course-card" href="filterslessons.html">
+  <div class="course-number">COURSE 18</div>
+  <div class="course-title">Filters & Effects</div>
+  <div class="course-desc">Apply shaders, blur, and visual effects for polish.</div>
+</a>
+
+<a class="course-card" href="uiintegrationlessons.html">
+  <div class="course-number">COURSE 19</div>
+  <div class="course-title">UI Integration</div>
+  <div class="course-desc">Learn to link sliders, buttons, and controls to your visuals.</div>
+</a>
+
+<a class="course-card" href="performanceoptimlessons.html">
+  <div class="course-number">COURSE 20</div>
+  <div class="course-title">Performance & Optimization</div>
+  <div class="course-desc">Tips to keep your visualizers smooth, even with lots of shapes.</div>
+</a>
+
+</div>
+
+</body>
+</html>

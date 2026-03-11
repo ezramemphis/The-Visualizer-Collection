@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lesson 4: Animated Grid</title>
+  <link rel="stylesheet" href="learn.css">
+</head>
+<body>
+  <h1>Lesson 4: Animated Grid</h1>
+
+  <canvas id="canvas" width="600" height="400"></canvas>
+
+  <div class="lesson-info">
+    <h2>Step 1: Make the Grid Move</h2>
+    <p>We’ll animate the squares up and down using <code>requestAnimationFrame</code> and a sine wave for smooth movement.</p>
+  </div>
+
+  <script type="module">
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const grid = 10;
+    let t = 0;
+
+    function draw(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const stepX = canvas.width / grid;
+      const stepY = canvas.height / grid;
+
+      for(let x=0;x<grid;x++){
+        for(let y=0;y<grid;y++){
+          const offset = Math.sin(t + x*0.5 + y*0.5) * 10;
+          ctx.fillStyle = '#0ff';
+          ctx.fillRect(x*stepX, y*stepY + offset, 6, 6);
+        }
+      }
+
+      t += 0.1;
+      requestAnimationFrame(draw);
+    }
+
+    draw();
+  </script>
+</body>
+</html>
