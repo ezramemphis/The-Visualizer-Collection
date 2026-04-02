@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0c0a06;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:'Courier New',monospace}
+canvas{display:block;border:1px solid #2a2215}
+#ui{display:flex;gap:12px;align-items:center;justify-content:center;margin-top:12px;flex-wrap:wrap}
+button{background:none;border:1px solid #443322;color:#887755;padding:5px 14px;border-radius:3px;cursor:pointer;font-family:'Courier New';font-size:11px;letter-spacing:1px}
+button:hover{border-color:#887755;color:#aaa988}
+button.on{border-color:#aaa988;color:#ccc8a8}
+.ctrl{display:flex;flex-direction:column;align-items:center;gap:3px}
+.clbl{font-size:9px;color:#443322;letter-spacing:1px}
+input[type=range]{-webkit-appearance:none;width:80px;height:2px;background:#1a1208;border-radius:1px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:#887755;cursor:pointer}
+#freqlabel{font-size:11px;color:#887755;letter-spacing:3px;text-align:center;margin-top:6px}
+#tag{font-size:9px;color:#221a0a;letter-spacing:2px;text-align:center;margin-top:4px}
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <button id="startBtn">VIBRATE</button>
+  <div class="ctrl"><span class="clbl">FREQUENCY</span><input type="range" id="freq" min="1" max="9" step="0.25" value="3"></div>
+  <div class="ctrl"><span class="clbl">M MODE</span><input type="range" id="mmode" min="1" max="6" step="1" value="2"></div>
+  <div class="ctrl"><span class="clbl">N MODE</span><input type="range" id="nmode" min="1" max="6" step="1" value="3"></div>
+  <div class="ctrl"><span class="clbl">GRAIN DENSITY</span><input type="range" id="grains" min="2000" max="12000" step="500" value="5000"></div>
+  <button id="scatter">SCATTER</button>
+</div>
+<div id="freqlabel">CHLADNI MODE — — —</div>
+<div id="tag">CYMATICS SAND TABLE — CHLADNI FIGURE AUDIO GENERATOR</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const SZ = 500;
+canvas.width = SZ; canvas.height = SZ;
+canvas.style.maxWidth = '100%';
+
+let analyser, freqData, running = false;
+let t = 0;
+let sandX, sandY, sandVX, sandVY, sandAlive;
+let N_GRAINS;
+
+function initSand(n) {
+  N_GRAINS = n;
+  sandX  = new Float32Array(n);
+  sandY  = new Float32Array(n);
+  sandVX = new Float32Array(n);
+  sandVY = new Float32Array(n);
+  sandAlive = new Uint8Array(n).fill(1);
+  for (let i = 0; i < n; i++) {
+    sandX[i] = Math.random() * SZ;
+    sandY[i] = Math.random() * SZ;
+    sandVX[i] = (Math.random()-0.5)*2;
+    sandVY[i] = (Math.random()-0.5)*2;
+  }
+}
+
+// Chladni function: product of sinusoids gives node lines
+function chladni(x, y, m, n) {
+  const nx = (x/SZ) * Math.PI;
+  const ny = (y/SZ) * Math.PI;
+  return Math.cos(m * nx) * Math.cos(n * ny) - Math.cos(n * nx) * Math.cos(m * ny);
+}
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!running) {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const ac = new AudioContext();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.82;
+    src.connect(analyser);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    running = true;
+    document.getElementById('startBtn').textContent = '● VIBRATING';
+    document.getElementById('startBtn').classList.add('on');
+  }
+});
+
+document.getElementById('scatter').addEventListener('click', () => {
+  const n = parseInt(document.getElementById('grains').value);
+  initSand(n);
+});
+
+document.getElementById('grains').addEventListener('change', () => {
+  const n = parseInt(document.getElementById('grains').value);
+  initSand(n);
+});
+
+function avg(arr,s,e){let v=0;for(let i=s;i<e;i++)v+=arr[i];return v/(e-s)/255}
+
+let lastM = 0, lastN = 0;
+const fieldCache = new Float32Array(SZ*SZ);
+let fieldDirty = true;
+
+function rebuildField(m, n) {
+  for (let y=0; y<SZ; y++) {
+    for (let x=0; x<SZ; x++) {
+      fieldCache[y*SZ+x] = chladni(x,y,m,n);
+    }
+  }
+  fieldDirty = false;
+  lastM = m; lastN = n;
+}
+
+function draw() {
+  requestAnimationFrame(draw);
+  t++;
+
+  if (running && analyser) analyser.getByteFrequencyData(freqData);
+  const bass = freqData ? avg(freqData,0,10) : 0;
+  const mid  = freqData ? avg(freqData,10,60) : 0;
+  const high = freqData ? avg(freqData,60,180) : 0;
+  const vol  = freqData ? avg(freqData,0,200) : 0;
+
+  let m = parseInt(document.getElementById('mmode').value);
+  let n = parseInt(document.getElementById('nmode').value);
+
+  // Audio morphs the mode slightly
+  m = Math.round(m + mid * 2);
+  n = Math.round(n + high * 2);
+  m = Math.max(1, Math.min(9, m));
+  n = Math.max(1, Math.min(9, n));
+
+  if (m !== lastM || n !== lastN || fieldDirty) rebuildField(m, n);
+
+  document.getElementById('freqlabel').textContent = `CHLADNI MODE  M=${m}  N=${n}  VOL=${(vol*100).toFixed(0)}%`;
+
+  // Clear
+  ctx.fillStyle='rgba(12,10,6,0.12)';
+  ctx.fillRect(0,0,SZ,SZ);
+
+  // Plate border
+  ctx.strokeStyle='rgba(80,60,30,0.4)';
+  ctx.lineWidth=2;
+  ctx.strokeRect(1,1,SZ-2,SZ-2);
+
+  // Vibration energy — bigger with audio
+  const vibration = 0.4 + vol * 3 + bass * 4;
+
+  // Update sand
+  const gn = sandX ? sandX.length : 0;
+  for (let i = 0; i < gn; i++) {
+    const x = Math.round(sandX[i]);
+    const y = Math.round(sandY[i]);
+    const xi = Math.max(0, Math.min(SZ-1, x));
+    const yi = Math.max(0, Math.min(SZ-1, y));
+    const cv = fieldCache[yi*SZ+xi];
+
+    // Force toward zero-crossing (node lines) of the Chladni function
+    // Gradient-based nudge
+    const xi2 = Math.min(SZ-1, xi+2), yi2 = Math.min(SZ-1, yi+2);
+    const gx = fieldCache[yi*SZ+xi2] - cv;
+    const gy = fieldCache[yi2*SZ+xi] - cv;
+    const mag = Math.sqrt(gx*gx+gy*gy)+0.001;
+
+    // Sand wants to move toward node lines (cv→0), gradient points away from node
+    const force = cv * vibration;
+    sandVX[i] -= (gx/mag)*force*0.4;
+    sandVY[i] -= (gy/mag)*force*0.4;
+
+    // Random kick proportional to vibration
+    sandVX[i] += (Math.random()-0.5)*vibration*0.15;
+    sandVY[i] += (Math.random()-0.5)*vibration*0.15;
+
+    // Damping
+    sandVX[i] *= 0.92;
+    sandVY[i] *= 0.92;
+
+    sandX[i] += sandVX[i];
+    sandY[i] += sandVY[i];
+
+    // Bounce off edges
+    if (sandX[i] < 0) { sandX[i]=0; sandVX[i]*=-0.5; }
+    if (sandX[i] > SZ) { sandX[i]=SZ; sandVX[i]*=-0.5; }
+    if (sandY[i] < 0) { sandY[i]=0; sandVY[i]*=-0.5; }
+    if (sandY[i] > SZ) { sandY[i]=SZ; sandVY[i]*=-0.5; }
+  }
+
+  // Render sand
+  const imgData = ctx.getImageData(0,0,SZ,SZ);
+  const px = imgData.data;
+
+  for (let i = 0; i < gn; i++) {
+    const sx = Math.round(sandX[i]);
+    const sy = Math.round(sandY[i]);
+    if (sx < 0 || sx >= SZ || sy < 0 || sy >= SZ) continue;
+    const idx = (sy * SZ + sx) * 4;
+    // Sandy warm color
+    const energy = Math.min(1,(sandVX[i]*sandVX[i]+sandVY[i]*sandVY[i])*0.5);
+    px[idx]   = Math.min(255, px[idx]   + Math.floor(190 + energy * 65));
+    px[idx+1] = Math.min(255, px[idx+1] + Math.floor(150 + energy * 30));
+    px[idx+2] = Math.min(255, px[idx+2] + Math.floor(60  + energy * 20));
+    px[idx+3] = 255;
+  }
+
+  ctx.putImageData(imgData,0,0);
+
+  // Visualize Chladni node lines (faint overlay)
+  if (t % 2 === 0) {
+    for (let y=0; y<SZ; y+=4) {
+      for (let x=0; x<SZ; x+=4) {
+        const cv = Math.abs(fieldCache[y*SZ+x]);
+        if (cv < 0.04) {
+          ctx.fillStyle=`rgba(60,80,40,${0.08+vol*0.1})`;
+          ctx.fillRect(x,y,2,2);
+        }
+      }
+    }
+  }
+}
+
+initSand(5000);
+
+// Initial field
+rebuildField(2, 3);
+
+ctx.fillStyle='#0c0a06';
+ctx.fillRect(0,0,SZ,SZ);
+
+draw();
+</script>
+</body>
+</html>

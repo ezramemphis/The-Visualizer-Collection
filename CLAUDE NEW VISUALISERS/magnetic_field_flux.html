@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d0d12;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:monospace}
+canvas{display:block}
+#ui{display:flex;gap:16px;align-items:center;justify-content:center;margin-top:14px;flex-wrap:wrap}
+button{background:none;border:1px solid #444;color:#aaa;padding:5px 16px;border-radius:4px;cursor:pointer;font-family:monospace;font-size:11px;letter-spacing:1px}
+button:hover{border-color:#88f;color:#aaf}
+button.on{border-color:#55f;color:#88f}
+.row{display:flex;gap:16px;align-items:center}
+.lbl{font-size:10px;color:#555;letter-spacing:1px}
+input[type=range]{-webkit-appearance:none;width:90px;height:2px;background:#222;border-radius:1px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:#55f;cursor:pointer}
+#tag{font-size:10px;color:#333;letter-spacing:2px;text-align:center;margin-top:8px}
+select{background:#111;color:#aaa;border:1px solid #333;padding:3px 8px;font-family:monospace;font-size:11px;border-radius:3px;outline:none}
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <button id="startBtn">TAP TO LISTEN</button>
+  <div class="row">
+    <span class="lbl">POLES</span>
+    <select id="poles"><option value="2">2</option><option value="4" selected>4</option><option value="6">6</option><option value="8">8</option></select>
+    <span class="lbl">FILING DENSITY</span>
+    <input type="range" id="density" min="200" max="1200" value="600" step="50">
+    <span class="lbl">FIELD STRENGTH</span>
+    <input type="range" id="fieldStr" min="0.5" max="4" step="0.1" value="1.5">
+  </div>
+</div>
+<div id="tag">MAGNETIC FIELD FLUX — IRON FILING AUDIO VISUALIZER</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = canvas.width = Math.min(window.innerWidth, 720);
+  H = canvas.height = Math.min(window.innerHeight * 0.72, 500);
+  buildFilings();
+}
+window.addEventListener('resize', resize);
+
+let analyser, freqData, running = false;
+let filings = [];
+
+class Filing {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = Math.random() * W;
+    this.y = Math.random() * H;
+    this.angle = Math.random() * Math.PI;
+    this.len = 4 + Math.random() * 6;
+    this.speed = 0.3 + Math.random() * 0.4;
+    this.alpha = 0.3 + Math.random() * 0.5;
+  }
+}
+
+function buildFilings() {
+  const n = parseInt(document.getElementById('density').value);
+  filings = Array.from({length: n}, () => new Filing());
+}
+
+document.getElementById('density').addEventListener('input', buildFilings);
+
+function getPoles() {
+  const n = parseInt(document.getElementById('poles').value);
+  const poles = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const r = Math.min(W, H) * 0.22;
+    poles.push({
+      x: W/2 + Math.cos(a) * r,
+      y: H/2 + Math.sin(a) * r,
+      polarity: i % 2 === 0 ? 1 : -1
+    });
+  }
+  return poles;
+}
+
+function fieldAt(x, y, poles, audioMod) {
+  let fx = 0, fy = 0;
+  for (const p of poles) {
+    const dx = x - p.x, dy = y - p.y;
+    const d2 = dx*dx + dy*dy + 1;
+    const strength = p.polarity * (1 + audioMod * 2) / d2 * 800;
+    fx += -dy * strength;
+    fy += dx * strength;
+  }
+  return Math.atan2(fy, fx);
+}
+
+function avg(arr, s, e) {
+  let v = 0;
+  for (let i = s; i < e; i++) v += arr[i];
+  return v / (e - s) / 255;
+}
+
+let t = 0;
+const poles_cache = [];
+let poles = getPoles();
+document.getElementById('poles').addEventListener('change', () => { poles = getPoles(); });
+
+function draw() {
+  requestAnimationFrame(draw);
+  t++;
+
+  if (running && analyser) analyser.getByteFrequencyData(freqData);
+
+  const bass = freqData ? avg(freqData, 0, 12) : 0;
+  const mid = freqData ? avg(freqData, 12, 80) : 0;
+  const high = freqData ? avg(freqData, 80, 200) : 0;
+  const fieldStr = parseFloat(document.getElementById('fieldStr').value);
+
+  // Fade trail
+  ctx.fillStyle = 'rgba(13,13,18,0.35)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Draw field lines (background)
+  if (t % 3 === 0) {
+    for (let px = 40; px < W; px += 50) {
+      for (let py = 40; py < H; py += 50) {
+        const a = fieldAt(px, py, poles, bass * fieldStr);
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(a);
+        ctx.strokeStyle = `rgba(40,40,100,0.18)`;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(-14, 0);
+        ctx.lineTo(14, 0);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  // Draw iron filings
+  const n = filings.length;
+  for (let i = 0; i < n; i++) {
+    const f = filings[i];
+    // Target angle from field
+    const targetAngle = fieldAt(f.x, f.y, poles, bass * fieldStr);
+    // Apply audio ripple per filing band
+    const band = Math.floor((i / n) * (freqData ? freqData.length * 0.5 : 100));
+    const bv = freqData ? freqData[band] / 255 : 0;
+
+    // Smooth rotation toward field
+    let da = targetAngle - f.angle;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    f.angle += da * (0.04 + mid * 0.08);
+
+    // Drift along field lines
+    f.x += Math.cos(f.angle) * f.speed * (0.5 + bv * 2);
+    f.y += Math.sin(f.angle) * f.speed * (0.5 + bv * 2);
+
+    // Wrap
+    if (f.x < 0) f.x = W;
+    if (f.x > W) f.x = 0;
+    if (f.y < 0) f.y = H;
+    if (f.y > H) f.y = 0;
+
+    const len = f.len * (1 + bv * 2.5);
+    const alpha = f.alpha * (0.5 + bv * 0.5 + high * 0.3);
+    const r = Math.floor(120 + bv * 80 + bass * 80);
+    const g = Math.floor(120 + high * 100);
+    const b2 = Math.floor(200 + mid * 55);
+
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(f.angle);
+    ctx.strokeStyle = `rgba(${r},${g},${b2},${alpha})`;
+    ctx.lineWidth = 0.7 + bv * 0.8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-len/2, 0);
+    ctx.lineTo(len/2, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Draw poles
+  for (const p of poles) {
+    const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 28 + bass * 20);
+    if (p.polarity > 0) {
+      grd.addColorStop(0, `rgba(80,80,255,${0.6 + bass * 0.4})`);
+      grd.addColorStop(1, 'rgba(0,0,60,0)');
+    } else {
+      grd.addColorStop(0, `rgba(255,60,60,${0.5 + bass * 0.4})`);
+      grd.addColorStop(1, 'rgba(60,0,0,0)');
+    }
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 28 + bass * 20, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = p.polarity > 0 ? '#6688ff' : '#ff6644';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 7, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!running) {
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    const ac = new AudioContext();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.8;
+    src.connect(analyser);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    running = true;
+    document.getElementById('startBtn').textContent = 'LIVE ●';
+    document.getElementById('startBtn').classList.add('on');
+  }
+});
+
+resize();
+draw();
+</script>
+</body>
+</html>

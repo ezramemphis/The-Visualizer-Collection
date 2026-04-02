@@ -439,3 +439,37 @@ input.slider-main::-webkit-slider-thumb {
 input.slider-exp::-webkit-slider-thumb {
   background-image: url("white_slider.jpg");
 }
+
+
+
+
+#midiBtn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+
+  background: #ff2b2b;
+  color: white;
+  border: none;
+
+  font-size: 16px;
+  font-weight: bold;
+
+  padding: 14px 20px;
+  border-radius: 10px;
+
+  cursor: pointer;
+  z-index: 10000;
+
+  box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+#midiBtn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(255, 0, 0, 0.9);
+}
+
+#midiBtn:active {
+  transform: scale(0.95);
+}

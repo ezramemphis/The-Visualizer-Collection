@@ -37,10 +37,33 @@
   <script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.5/dist/jsmediatags.min.js"></script>
 
   <!-- shared audio + canvas engine -->
-  <script type="module" src="../js/visualizer.js"></script>
+  <script type="module" src="../main.js"></script>
 
   <!-- spectrum visualizer ONLY -->
   <script type="module" src="../js/kaleidoscope.js"></script>
+
+
+
+
+
+
+  <script type="module">
+  import { initMIDI } from "../midi.js";
+  import { settings } from "../js/kaleidoscope.js"; // or wherever your settings live
+
+  window.addEventListener("DOMContentLoaded", () => {
+
+    // 🔥 IMPORTANT: pass your dev panel element here
+    const devPanel = document.querySelector("div"); // or better: give it an ID
+
+    initMIDI(settings, devPanel);
+
+    document.getElementById("midiBtn").addEventListener("click", () => {
+      window.MIDI.openPanel();
+    });
+
+  });
+</script>
 
 </body>
 </html>

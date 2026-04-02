@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#09020f;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:'Courier New',monospace}
+canvas{display:block}
+#ui{display:flex;gap:14px;align-items:center;justify-content:center;margin-top:12px;flex-wrap:wrap}
+button{background:none;border:1px solid #6020a0;color:#c060ff;padding:5px 14px;border-radius:3px;cursor:pointer;font-family:'Courier New';font-size:11px;letter-spacing:1px}
+button:hover{border-color:#a040e0;color:#e090ff}
+button.on{border-color:#e060ff;color:#f0a0ff;text-shadow:0 0 8px #d060ff}
+.ctrl{display:flex;flex-direction:column;align-items:center;gap:3px}
+.clbl{font-size:9px;color:#5020a0;letter-spacing:1px}
+input[type=range]{-webkit-appearance:none;width:80px;height:2px;background:#200a30;border-radius:1px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:#c060ff;cursor:pointer}
+#score-display{font-size:13px;color:#e060ff;letter-spacing:4px;text-align:center;margin-top:6px;font-weight:bold}
+#tag{font-size:9px;color:#2a0840;letter-spacing:2px;text-align:center;margin-top:4px}
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <button id="startBtn">INSERT COIN</button>
+  <div class="ctrl"><span class="clbl">BALL SPEED</span><input type="range" id="ballSpeed" min="1" max="5" value="2.5" step="0.1"></div>
+  <div class="ctrl"><span class="clbl">BUMPER FORCE</span><input type="range" id="bumperForce" min="2" max="12" value="6" step="0.5"></div>
+  <div class="ctrl"><span class="clbl">MULTI-BALL</span><input type="range" id="multiBall" min="1" max="6" value="1" step="1"></div>
+  <div class="ctrl"><span class="clbl">CHAOS</span><input type="range" id="chaos" min="0" max="2" value="0.5" step="0.05"></div>
+</div>
+<div id="score-display">SCORE: 000000</div>
+<div id="tag">NEON PINBALL — AUDIO REACTIVE TABLE</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = canvas.width = Math.min(window.innerWidth, 420);
+  H = canvas.height = Math.min(window.innerHeight * 0.75, 560);
+}
+window.addEventListener('resize', resize);
+resize();
+
+let analyser, freqData, running = false;
+let score = 0;
+let t = 0;
+let balls = [];
+let bumpers = [];
+let flashes = [];
+let flipperAngleL = 0, flipperAngleR = 0;
+
+function initBumpers() {
+  bumpers = [];
+  const positions = [
+    [0.25, 0.25], [0.5, 0.18], [0.75, 0.25],
+    [0.35, 0.38], [0.65, 0.38],
+    [0.5, 0.50], [0.2, 0.52], [0.8, 0.52],
+    [0.35, 0.62], [0.65, 0.62],
+  ];
+  positions.forEach(([tx,ty],i) => {
+    bumpers.push({
+      x: tx * W, y: ty * H,
+      r: 18 + (i%3)*4,
+      hue: 60 + i*28,
+      flash: 0,
+      hits: 0
+    });
+  });
+}
+
+class Ball {
+  constructor(x,y,vx,vy) {
+    this.x = x||W/2; this.y = y||(H*0.8);
+    this.vx = vx||((Math.random()-0.5)*3);
+    this.vy = vy||(-6);
+    this.r = 8; this.trail = [];
+  }
+  update(bass, mid, chaos, speed, bForce) {
+    const s = speed * (1 + bass * 1.5);
+    this.vx += (Math.random()-0.5)*chaos*0.3;
+    this.vy += 0.18 + bass * 0.1; // gravity
+    // Clamp speed
+    const spd = Math.sqrt(this.vx*this.vx+this.vy*this.vy);
+    if (spd > s*4) { this.vx*=(s*4/spd); this.vy*=(s*4/spd); }
+
+    this.trail.push({x:this.x,y:this.y});
+    if (this.trail.length > 20) this.trail.shift();
+
+    this.x += this.vx; this.y += this.vy;
+
+    // Walls
+    if (this.x < this.r) { this.x=this.r; this.vx*=-0.75; }
+    if (this.x > W-this.r) { this.x=W-this.r; this.vx*=-0.75; }
+    if (this.y < this.r+20) { this.y=this.r+20; this.vy*=-0.8; }
+
+    // Flippers
+    const fY = H - 60;
+    const fLX = W*0.27, fRX = W*0.73;
+    const fLen = W*0.22;
+    if (this.y > fY - 10 && this.y < fY + 20) {
+      if (this.x > fLX - fLen && this.x < fLX + fLen) {
+        this.vy = -s*3*(1+bass*2); this.vx += (this.x - fLX)*0.1;
+        score += 10; addFlash(this.x, this.y, 280);
+      }
+      if (this.x > fRX - fLen && this.x < fRX + fLen) {
+        this.vy = -s*3*(1+bass*2); this.vx += (this.x - fRX)*0.1;
+        score += 10; addFlash(this.x, this.y, 280);
+      }
+    }
+
+    // Bumpers
+    for (const b of bumpers) {
+      const dx=this.x-b.x, dy=this.y-b.y;
+      const d = Math.sqrt(dx*dx+dy*dy);
+      if (d < this.r+b.r) {
+        const norm = 1/(d||1);
+        const bounce = bForce * (1 + bass * 2);
+        this.vx = dx*norm*bounce; this.vy = dy*norm*bounce;
+        this.x = b.x + dx*norm*(this.r+b.r+1);
+        this.y = b.y + dy*norm*(this.r+b.r+1);
+        b.flash = 1; b.hits++;
+        score += 100 * (b.hits > 5 ? 3 : 1);
+        addFlash(b.x, b.y, b.hue);
+      }
+    }
+
+    return this.y < H + 50;
+  }
+}
+
+function addFlash(x, y, hue) {
+  flashes.push({x, y, hue, life:1, r:12});
+}
+
+function initBalls(n) {
+  balls = [];
+  for (let i=0;i<n;i++) {
+    balls.push(new Ball(W/2 + (Math.random()-0.5)*30, H*0.82, (Math.random()-0.5)*2, -7-Math.random()*3));
+  }
+}
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!running) {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const ac = new AudioContext();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 1024;
+    analyser.smoothingTimeConstant = 0.75;
+    src.connect(analyser);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    running = true;
+    document.getElementById('startBtn').textContent = '● PLAYING';
+    document.getElementById('startBtn').classList.add('on');
+  }
+});
+
+function avg(arr,s,e){let v=0;for(let i=s;i<e;i++)v+=arr[i];return v/(e-s)/255}
+
+function drawTable() {
+  // Background
+  ctx.fillStyle = 'rgba(9,2,15,0.88)';
+  ctx.fillRect(0,0,W,H);
+
+  // Lane guides
+  ctx.strokeStyle = 'rgba(180,60,255,0.12)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(W*0.12,0); ctx.lineTo(0,H*0.6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W*0.88,0); ctx.lineTo(W,H*0.6); ctx.stroke();
+
+  // Drain zone
+  ctx.strokeStyle = 'rgba(255,0,0,0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0,H-10); ctx.lineTo(W,H-10); ctx.stroke();
+}
+
+function drawFlippers(bass) {
+  const fY = H - 60;
+  const fLX = W*0.27, fRX = W*0.73;
+  const fLen = W*0.22;
+  // Flipper angle oscillates with bass
+  const fa = Math.sin(t*0.08) * 0.4 * (1 + bass * 2);
+  flipperAngleL = fa; flipperAngleR = -fa;
+
+  const drawFlipper = (cx,angle) => {
+    ctx.save();
+    ctx.translate(cx, fY);
+    ctx.rotate(angle);
+    ctx.strokeStyle = `rgba(${180+bass*75},50,${255},${0.8+bass*0.2})`;
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = '#c060ff';
+    ctx.shadowBlur = 8 + bass * 12;
+    ctx.beginPath();
+    ctx.moveTo(-fLen,0); ctx.lineTo(fLen,0);
+    ctx.stroke();
+    ctx.restore();
+  };
+  drawFlipper(fLX, flipperAngleL);
+  drawFlipper(fRX, flipperAngleR);
+}
+
+function draw() {
+  requestAnimationFrame(draw);
+  t++;
+
+  if (running && analyser) analyser.getByteFrequencyData(freqData);
+  const bass = freqData ? avg(freqData, 0, 8) : 0;
+  const mid  = freqData ? avg(freqData, 8, 50) : 0;
+  const high = freqData ? avg(freqData, 50, 150) : 0;
+
+  const speed  = parseFloat(document.getElementById('ballSpeed').value);
+  const bForce = parseFloat(document.getElementById('bumperForce').value);
+  const chaos  = parseFloat(document.getElementById('chaos').value);
+  const nBalls = parseInt(document.getElementById('multiBall').value);
+
+  drawTable();
+
+  // Bumper glow decreases over time
+  bumpers.forEach(b => {
+    b.flash = Math.max(0, b.flash - 0.06);
+    const glow = b.flash + high * 0.3 + bass * 0.1;
+    const r = Math.floor(255 * Math.sin(b.hue/360*Math.PI));
+    const g2 = Math.floor(255 * Math.sin(b.hue/360*Math.PI + 2));
+    const bl = Math.floor(255 * Math.sin(b.hue/360*Math.PI + 4));
+
+    // Bumper glow ring
+    ctx.shadowBlur = 0;
+    const gr = ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,b.r*2.5);
+    gr.addColorStop(0,`rgba(${r},${g2},${bl},${glow*0.5})`);
+    gr.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle = gr;
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.r*2.5,0,Math.PI*2); ctx.fill();
+
+    // Bumper body
+    ctx.fillStyle = `hsla(${b.hue},${70+glow*30}%,${20+glow*30}%,0.9)`;
+    ctx.beginPath(); ctx.arc(b.x,b.y,b.r,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = `hsla(${b.hue},100%,${60+glow*30}%,${0.5+glow*0.5})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Score ring label
+    if (b.flash > 0.5) {
+      ctx.fillStyle = `rgba(255,255,255,${b.flash})`;
+      ctx.font = `bold 9px Courier New`;
+      ctx.textAlign = 'center';
+      ctx.fillText('100', b.x, b.y - b.r - 4);
+    }
+  });
+
+  // Flash effects
+  for (let i = flashes.length-1; i>=0; i--) {
+    const f = flashes[i];
+    f.life -= 0.1; f.r += 4;
+    if (f.life <= 0) { flashes.splice(i,1); continue; }
+    ctx.strokeStyle = `hsla(${f.hue},100%,70%,${f.life*0.8})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(f.x,f.y,f.r,0,Math.PI*2); ctx.stroke();
+  }
+
+  // Auto spawn missing balls
+  while (balls.length < nBalls) {
+    balls.push(new Ball(W/2+(Math.random()-0.5)*20, H*0.82, (Math.random()-0.5)*2, -7));
+  }
+
+  // Update & draw balls
+  for (let i = balls.length-1; i>=0; i--) {
+    const ball = balls[i];
+    const alive = ball.update(bass, mid, chaos, speed, bForce);
+    if (!alive) { balls.splice(i,1); continue; }
+
+    // Trail
+    ball.trail.forEach((p,ti) => {
+      const a = (ti/ball.trail.length)*0.4;
+      ctx.fillStyle = `rgba(200,100,255,${a})`;
+      ctx.beginPath(); ctx.arc(p.x,p.y,ball.r*(ti/ball.trail.length)*0.6,0,Math.PI*2); ctx.fill();
+    });
+
+    // Ball
+    const ballGrd = ctx.createRadialGradient(ball.x-2,ball.y-2,1,ball.x,ball.y,ball.r);
+    ballGrd.addColorStop(0,'rgba(255,200,255,0.9)');
+    ballGrd.addColorStop(1,`rgba(${150+bass*105},50,${220+bass*35},0.9)`);
+    ctx.fillStyle = ballGrd;
+    ctx.shadowBlur = 12 + bass * 20;
+    ctx.shadowColor = '#dd88ff';
+    ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  drawFlippers(bass);
+
+  // Score
+  document.getElementById('score-display').textContent = `SCORE: ${score.toString().padStart(6,'0')}`;
+
+  // Bass impact flash screen
+  if (bass > 0.6) {
+    ctx.fillStyle = `rgba(180,50,255,${(bass-0.6)*0.15})`;
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
+initBumpers();
+initBalls(1);
+draw();
+</script>
+</body>
+</html>

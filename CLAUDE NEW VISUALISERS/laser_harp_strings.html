@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#020008;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:monospace}
+canvas{display:block}
+#ui{display:flex;gap:14px;align-items:center;justify-content:center;margin-top:12px;flex-wrap:wrap}
+button{background:none;border:1px solid #330055;color:#9933cc;padding:5px 14px;border-radius:3px;cursor:pointer;font-family:monospace;font-size:11px;letter-spacing:1px}
+button:hover{border-color:#aa44ee;color:#cc66ff}
+button.on{border-color:#cc44ff;color:#ee99ff;text-shadow:0 0 6px #cc44ff}
+.ctrl{display:flex;flex-direction:column;align-items:center;gap:3px}
+.clbl{font-size:9px;color:#330044;letter-spacing:1px}
+input[type=range]{-webkit-appearance:none;width:80px;height:2px;background:#0a0014;border-radius:1px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:#9933cc;cursor:pointer}
+select{background:#0a0014;color:#9933cc;border:1px solid #330055;padding:3px 6px;font-family:monospace;font-size:10px;border-radius:2px;outline:none}
+#tag{font-size:9px;color:#150022;letter-spacing:2px;text-align:center;margin-top:8px}
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <button id="startBtn">POWER ON</button>
+  <div class="ctrl"><span class="clbl">STRINGS</span><input type="range" id="strings" min="4" max="24" value="12" step="1"></div>
+  <div class="ctrl"><span class="clbl">PLUCK DEPTH</span><input type="range" id="pluck" min="0.5" max="6" value="2.5" step="0.1"></div>
+  <div class="ctrl"><span class="clbl">DECAY</span><input type="range" id="decay" min="0.92" max="0.999" value="0.97" step="0.001"></div>
+  <div class="ctrl"><span class="clbl">HARMONICS</span><input type="range" id="harmonics" min="1" max="5" value="3" step="1"></div>
+  <div class="ctrl"><span class="clbl">COLOR</span>
+    <select id="colorMode">
+      <option value="spectrum">spectrum</option>
+      <option value="mono-red">mono red</option>
+      <option value="mono-green">mono green</option>
+      <option value="mono-blue">mono blue</option>
+      <option value="thermal">thermal</option>
+    </select>
+  </div>
+</div>
+<div id="tag">LASER HARP — INTERFEROMETRIC AUDIO VISUALIZER</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = canvas.width = Math.min(window.innerWidth, 720);
+  H = canvas.height = Math.min(window.innerHeight * 0.72, 500);
+}
+window.addEventListener('resize', resize);
+resize();
+
+let analyser, freqData, running = false;
+let t = 0;
+// Per-string: displacement at each Y point stored as wave amplitudes
+let stringAmps = []; // [string][point]
+let stringVels = [];
+const Y_POINTS = 200;
+
+function initStrings(n) {
+  stringAmps = Array.from({length:n}, () => new Float32Array(Y_POINTS));
+  stringVels = Array.from({length:n}, () => new Float32Array(Y_POINTS));
+}
+
+document.getElementById('strings').addEventListener('input', () => {
+  initStrings(parseInt(document.getElementById('strings').value));
+});
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!running) {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const ac = new AudioContext();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.75;
+    src.connect(analyser);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    running = true;
+    document.getElementById('startBtn').textContent = '● LIVE';
+    document.getElementById('startBtn').classList.add('on');
+  }
+});
+
+function avg(arr,s,e){let v=0;for(let i=s;i<e;i++)v+=arr[i];return v/(e-s)/255}
+
+function getStringColor(i, n, vol, colorMode) {
+  const t2 = i/n;
+  switch(colorMode) {
+    case 'mono-red': return [255, 30+vol*80, 20+vol*40];
+    case 'mono-green': return [20+vol*40, 255, 30+vol*80];
+    case 'mono-blue': return [40+vol*60, 60+vol*80, 255];
+    case 'thermal': {
+      const h = t2 < 0.5 ? [255,Math.floor(t2*2*255),0] : [255-Math.floor((t2-0.5)*2*255),0,255];
+      return h;
+    }
+    default: { // spectrum
+      const hue = (t2 * 300 + 180) % 360;
+      const h = hue/60; const x = 1-(Math.abs(h%2-1));
+      const [r2,g2,b3] = h<1?[1,x,0]:h<2?[x,1,0]:h<3?[0,1,x]:h<4?[0,x,1]:h<5?[x,0,1]:[1,0,x];
+      return [Math.floor(r2*255),Math.floor(g2*255),Math.floor(b3*255)];
+    }
+  }
+}
+
+function draw() {
+  requestAnimationFrame(draw);
+  t++;
+
+  if (running && analyser) analyser.getByteFrequencyData(freqData);
+  const bass = freqData ? avg(freqData, 0, 10) : 0;
+  const mid  = freqData ? avg(freqData, 10, 60) : 0;
+  const high = freqData ? avg(freqData, 60, 200) : 0;
+  const vol  = freqData ? avg(freqData, 0, 200) : 0;
+
+  const nStr  = parseInt(document.getElementById('strings').value);
+  const pluck = parseFloat(document.getElementById('pluck').value);
+  const decay = parseFloat(document.getElementById('decay').value);
+  const nharm = parseInt(document.getElementById('harmonics').value);
+  const colorMode = document.getElementById('colorMode').value;
+
+  if (stringAmps.length !== nStr) initStrings(nStr);
+
+  // Fade
+  ctx.fillStyle = 'rgba(2,0,8,0.65)';
+  ctx.fillRect(0,0,W,H);
+
+  const strGap = W / (nStr + 1);
+
+  for (let si = 0; si < nStr; si++) {
+    const baseX = strGap * (si + 1);
+    const fi = Math.floor((si / nStr) * (freqData ? freqData.length * 0.6 : 100));
+    const fv = freqData ? freqData[fi] / 255 : 0;
+
+    const [r, g, b2] = getStringColor(si, nStr, vol, colorMode);
+
+    // Pluck excitation from audio
+    if (fv > 0.15) {
+      const midPoint = Math.floor(Y_POINTS / 2);
+      const force = fv * pluck * (1 + bass * 2);
+      // Excite the string at mid (fundamental) and harmonics
+      for (let h = 1; h <= nharm; h++) {
+        const pt = Math.floor(Y_POINTS / (2*h));
+        if (pt > 0 && pt < Y_POINTS) {
+          stringVels[si][pt] += force / h * (Math.random()-0.3);
+          stringVels[si][Y_POINTS - pt - 1] += force / h * (Math.random()-0.3);
+        }
+      }
+    }
+
+    // String physics: wave propagation
+    for (let j = 1; j < Y_POINTS-1; j++) {
+      const tension = 0.4 + si * 0.02 + bass * 0.1;
+      const acc = (stringAmps[si][j-1] + stringAmps[si][j+1] - 2*stringAmps[si][j]) * tension;
+      stringVels[si][j] += acc;
+      stringVels[si][j] *= decay;
+    }
+    for (let j = 0; j < Y_POINTS; j++) {
+      stringAmps[si][j] += stringVels[si][j];
+    }
+    // Fixed endpoints
+    stringAmps[si][0] = 0; stringAmps[si][Y_POINTS-1] = 0;
+
+    // Draw string
+    ctx.beginPath();
+    for (let j = 0; j < Y_POINTS; j++) {
+      const px = baseX + stringAmps[si][j] * (12 + vol * 8);
+      const py = (j / Y_POINTS) * H;
+      if (j===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+
+    // String alpha depends on total displacement energy
+    let energy = 0;
+    for (let j=0;j<Y_POINTS;j++) energy += stringAmps[si][j]*stringAmps[si][j];
+    energy = Math.min(1, energy / 20);
+
+    const alpha = 0.25 + energy * 0.75 + vol * 0.2;
+    ctx.strokeStyle = `rgba(${r},${g},${b2},${alpha})`;
+    ctx.lineWidth = 0.8 + energy * 2;
+    ctx.stroke();
+
+    // Glow core
+    ctx.strokeStyle = `rgba(255,255,255,${energy * 0.5})`;
+    ctx.lineWidth = 0.3;
+    ctx.stroke();
+
+    // Anti-node glows — where displacement is maximum
+    for (let j = 2; j < Y_POINTS-2; j++) {
+      const a = stringAmps[si][j];
+      if (Math.abs(a) > 0.8 && Math.abs(a) > Math.abs(stringAmps[si][j-1]) && Math.abs(a) > Math.abs(stringAmps[si][j+1])) {
+        const px = baseX + a * (12 + vol * 8);
+        const py = (j / Y_POINTS) * H;
+        const grd = ctx.createRadialGradient(px,py,0,px,py,8+energy*6);
+        grd.addColorStop(0,`rgba(${r},${g},${b2},${Math.min(1,Math.abs(a)*0.5)})`);
+        grd.addColorStop(1,'rgba(0,0,0,0)');
+        ctx.fillStyle = grd;
+        ctx.beginPath(); ctx.arc(px,py,8+energy*6,0,Math.PI*2); ctx.fill();
+      }
+    }
+
+    // Interference moiré between adjacent strings
+    if (si > 0) {
+      const prevX = strGap * si;
+      for (let j = 4; j < Y_POINTS-4; j+=4) {
+        const a1 = stringAmps[si][j];
+        const a2 = stringAmps[si-1][j];
+        const interference = Math.abs(a1 - a2);
+        if (interference > 0.3) {
+          const mx = (baseX + a1*12 + prevX + a2*12) / 2;
+          const my = (j/Y_POINTS)*H;
+          ctx.fillStyle = `rgba(255,255,200,${interference*0.06})`;
+          ctx.beginPath(); ctx.arc(mx,my,interference*2,0,Math.PI*2); ctx.fill();
+        }
+      }
+    }
+  }
+
+  // Top/bottom anchors
+  for (let si = 0; si < nStr; si++) {
+    const baseX = strGap * (si + 1);
+    const [r,g,b2] = getStringColor(si,nStr,vol,colorMode);
+    ctx.fillStyle=`rgba(${r},${g},${b2},0.8)`;
+    ctx.fillRect(baseX-2,0,4,6);
+    ctx.fillRect(baseX-2,H-6,4,6);
+  }
+
+  // Bass pulse ring at center
+  if (bass > 0.3) {
+    const pr = (t % 60) / 60 * W * 0.6;
+    ctx.strokeStyle=`rgba(200,100,255,${bass*(1-pr/(W*0.6))*0.2})`;
+    ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(W/2,H/2,pr,0,Math.PI*2); ctx.stroke();
+  }
+}
+
+initStrings(12);
+draw();
+</script>
+</body>
+</html>

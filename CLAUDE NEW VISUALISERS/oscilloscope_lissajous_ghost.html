@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1a1a1a;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:'Courier New',monospace}
+#scope-wrap{position:relative;width:520px;height:520px;border-radius:18px;background:#0a0f0a;overflow:hidden;box-shadow:0 0 40px #001a00,0 0 80px #001500,inset 0 0 30px #000}
+#scope-wrap::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,20,0,0.15) 3px,rgba(0,20,0,0.15) 4px);pointer-events:none;z-index:10;border-radius:18px}
+#scope-wrap::after{content:'';position:absolute;inset:0;border-radius:18px;box-shadow:inset 0 0 60px rgba(0,30,0,0.8);pointer-events:none;z-index:11}
+canvas{position:absolute;top:0;left:0;border-radius:18px}
+#bezel{position:relative;width:560px;background:#222;border-radius:24px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.8)}
+#crt-label{position:absolute;top:8px;left:50%;transform:translateX(-50%);font-size:9px;color:#334;letter-spacing:3px;z-index:20}
+#controls{display:flex;gap:12px;margin-top:14px;align-items:center;justify-content:center;flex-wrap:wrap}
+.ctrl-group{display:flex;flex-direction:column;align-items:center;gap:4px}
+.ctrl-label{font-size:9px;color:#666;letter-spacing:1px}
+input[type=range]{-webkit-appearance:none;width:70px;height:2px;background:#333;border-radius:1px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#0f0;cursor:pointer;box-shadow:0 0 4px #0f0}
+select{background:#1a1a1a;color:#0d0;border:1px solid #333;padding:3px 6px;font-family:'Courier New';font-size:10px;border-radius:2px;outline:none}
+button{background:none;border:1px solid #444;color:#0d0;padding:5px 14px;border-radius:3px;cursor:pointer;font-family:'Courier New';font-size:11px;letter-spacing:1px}
+button:hover{border-color:#0f0;text-shadow:0 0 6px #0f0}
+button.on{border-color:#0f0;box-shadow:0 0 6px #0f030}
+</style></head>
+<body>
+<div id="bezel">
+  <div id="scope-wrap">
+    <div id="crt-label">LISSAJOUS GHOST OSCILLOSCOPE — MODEL LG-1</div>
+    <canvas id="bg" width="520" height="520"></canvas>
+    <canvas id="c" width="520" height="520"></canvas>
+  </div>
+  <div id="controls">
+    <button id="startBtn">◀ POWER ▶</button>
+    <div class="ctrl-group"><span class="ctrl-label">X FREQ</span><input type="range" id="xfreq" min="1" max="8" step="0.5" value="3"></div>
+    <div class="ctrl-group"><span class="ctrl-label">Y FREQ</span><input type="range" id="yfreq" min="1" max="8" step="0.5" value="2"></div>
+    <div class="ctrl-group"><span class="ctrl-label">PHASE</span><input type="range" id="phase" min="0" max="6.28" step="0.05" value="1.57"></div>
+    <div class="ctrl-group"><span class="ctrl-label">PERSIST</span><input type="range" id="persist" min="0.01" max="0.18" step="0.01" value="0.06"></div>
+    <div class="ctrl-group"><span class="ctrl-label">INTENSITY</span><input type="range" id="intensity" min="0.3" max="2" step="0.05" value="1"></div>
+  </div>
+</div>
+
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+const bg = document.getElementById('bg');
+const bgCtx = bg.getContext('2d');
+const W = 520, H = 520;
+
+// Draw static CRT grid
+function drawGrid() {
+  bgCtx.fillStyle = '#020802';
+  bgCtx.fillRect(0,0,W,H);
+  bgCtx.strokeStyle = 'rgba(0,60,0,0.35)';
+  bgCtx.lineWidth = 0.5;
+  const divisions = 10;
+  for (let i = 0; i <= divisions; i++) {
+    const x = i * W/divisions;
+    const y = i * H/divisions;
+    bgCtx.beginPath();
+    bgCtx.moveTo(x,0); bgCtx.lineTo(x,H);
+    bgCtx.stroke();
+    bgCtx.beginPath();
+    bgCtx.moveTo(0,y); bgCtx.lineTo(W,y);
+    bgCtx.stroke();
+  }
+  // Center crosshairs
+  bgCtx.strokeStyle = 'rgba(0,100,0,0.5)';
+  bgCtx.lineWidth = 0.8;
+  bgCtx.beginPath();
+  bgCtx.moveTo(W/2,0); bgCtx.lineTo(W/2,H);
+  bgCtx.stroke();
+  bgCtx.beginPath();
+  bgCtx.moveTo(0,H/2); bgCtx.lineTo(W,H/2);
+  bgCtx.stroke();
+  // Corner marks
+  bgCtx.fillStyle = 'rgba(0,60,0,0.4)';
+  const cs = 4;
+  [[40,40],[480,40],[40,480],[480,480]].forEach(([x,y]) => {
+    bgCtx.fillRect(x-1,y-cs,2,cs*2);
+    bgCtx.fillRect(x-cs,y-1,cs*2,2);
+  });
+}
+
+let analyser, freqData, running = false;
+let t = 0;
+let trailData = [];
+const TRAIL_LEN = 800;
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!running) {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const ac = new AudioContext();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 4096;
+    analyser.smoothingTimeConstant = 0.7;
+    src.connect(analyser);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    running = true;
+    document.getElementById('startBtn').classList.add('on');
+  }
+});
+
+function avg(arr,s,e){let v=0;for(let i=s;i<e;i++)v+=arr[i];return v/(e-s)/255}
+
+function draw() {
+  requestAnimationFrame(draw);
+  t += 0.008;
+
+  if (running && analyser) analyser.getByteFrequencyData(freqData);
+
+  const bass = freqData ? avg(freqData, 0, 8) : 0.1;
+  const mid  = freqData ? avg(freqData, 8, 60) : 0.05;
+  const high = freqData ? avg(freqData, 60, 180) : 0.03;
+
+  const xf = parseFloat(document.getElementById('xfreq').value);
+  const yf = parseFloat(document.getElementById('yfreq').value);
+  const ph = parseFloat(document.getElementById('phase').value) + mid * 1.5;
+  const persist = parseFloat(document.getElementById('persist').value);
+  const intens = parseFloat(document.getElementById('intensity').value);
+
+  // Fade phosphor
+  ctx.fillStyle = `rgba(2,8,2,${persist})`;
+  ctx.fillRect(0,0,W,H);
+
+  // Draw Lissajous paths — multiple overlapping with audio morphing
+  const segments = 400;
+  const amp = 190 + bass * 60;
+
+  for (let layer = 0; layer < 3; layer++) {
+    const layerPhase = ph + layer * 0.4 + high * layer * 0.3;
+    const layerAmp = amp * (1 - layer * 0.15);
+    const alpha = (1 - layer * 0.28) * intens;
+
+    ctx.beginPath();
+    for (let i = 0; i <= segments; i++) {
+      const p = (i / segments) * Math.PI * 2;
+      const ax = layerAmp * Math.sin(xf * p + layerPhase + t * 0.3);
+      const ay = layerAmp * Math.sin(yf * p + t * 0.15);
+      // Audio distortion
+      const bx = freqData ? (freqData[Math.floor(i * 0.3)] - 128) / 128 * bass * 30 : 0;
+      const by = freqData ? (freqData[Math.floor(i * 0.5)] - 128) / 128 * mid * 25 : 0;
+      const x = W/2 + ax + bx;
+      const y = H/2 + ay + by;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    // Phosphor green glow
+    ctx.strokeStyle = `rgba(${Math.floor(60 + bass*80)},${Math.floor(220 + high*35)},${Math.floor(60 + mid*60)},${alpha * 0.8})`;
+    ctx.lineWidth = 0.7 + layer * 0.3;
+    ctx.stroke();
+  }
+
+  // Bright core line
+  ctx.beginPath();
+  for (let i = 0; i <= segments; i++) {
+    const p = (i / segments) * Math.PI * 2;
+    const ax = amp * Math.sin(xf * p + ph + t * 0.3);
+    const ay = amp * Math.sin(yf * p + t * 0.15);
+    const bx = freqData ? (freqData[Math.floor(i * 0.3)] - 128) / 128 * bass * 20 : 0;
+    const by = freqData ? (freqData[Math.floor(i * 0.5)] - 128) / 128 * mid * 15 : 0;
+    const x = W/2 + ax + bx;
+    const y = H/2 + ay + by;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.strokeStyle = `rgba(180,255,180,${0.7 * intens})`;
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+
+  // Moving dot (beam)
+  const dp = (t * 0.5) % (Math.PI * 2);
+  const dotX = W/2 + amp * Math.sin(xf * dp + ph + t * 0.3);
+  const dotY = H/2 + amp * Math.sin(yf * dp + t * 0.15);
+  ctx.fillStyle = `rgba(220,255,220,${0.9 * intens})`;
+  ctx.beginPath();
+  ctx.arc(dotX, dotY, 2.5 + bass * 3, 0, Math.PI*2);
+  ctx.fill();
+
+  // Bloom ring on dot
+  const grd = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, 12 + bass * 10);
+  grd.addColorStop(0, `rgba(100,255,100,${0.4 * intens})`);
+  grd.addColorStop(1, 'rgba(0,255,0,0)');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.arc(dotX, dotY, 12 + bass * 10, 0, Math.PI*2);
+  ctx.fill();
+}
+
+drawGrid();
+draw();
+</script>
+</body>
+</html>

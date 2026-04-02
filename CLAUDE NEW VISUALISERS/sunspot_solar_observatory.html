@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:monospace}
+canvas{display:block}
+#ui{display:flex;gap:14px;align-items:center;justify-content:center;margin-top:12px;flex-wrap:wrap}
+button{background:none;border:1px solid #553300;color:#cc8833;padding:5px 14px;border-radius:3px;cursor:pointer;font-family:monospace;font-size:11px;letter-spacing:1px}
+button:hover{border-color:#cc8833;color:#ffaa55}
+button.on{border-color:#ffaa33;color:#ffcc66;text-shadow:0 0 6px #ff8800}
+.ctrl{display:flex;flex-direction:column;align-items:center;gap:3px}
+.clbl{font-size:9px;color:#442200;letter-spacing:1px}
+input[type=range]{-webkit-appearance:none;width:80px;height:2px;background:#0a0500;border-radius:1px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:#cc8833;cursor:pointer}
+#telemetry{font-size:9px;color:#553300;letter-spacing:2px;text-align:center;margin-top:6px}
+#tag{font-size:9px;color:#1a0a00;letter-spacing:2px;text-align:center;margin-top:4px}
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <button id="startBtn">BEGIN OBSERVATION</button>
+  <div class="ctrl"><span class="clbl">PLASMA LOOPS</span><input type="range" id="loops" min="3" max="14" value="7" step="1"></div>
+  <div class="ctrl"><span class="clbl">FLARE FORCE</span><input type="range" id="flareForce" min="0.5" max="5" value="2" step="0.1"></div>
+  <div class="ctrl"><span class="clbl">GRANULATION</span><input type="range" id="gran" min="0" max="1" value="0.6" step="0.05"></div>
+  <div class="ctrl"><span class="clbl">CORONA EXTENT</span><input type="range" id="corona" min="0.1" max="1.5" value="0.7" step="0.05"></div>
+</div>
+<div id="telemetry">SOLAR MONITOR OFFLINE</div>
+<div id="tag">SUNSPOT SOLAR OBSERVATORY — HELIOSPHERIC AUDIO RENDERER</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H, CX, CY, SR;
+function resize() {
+  W = canvas.width = Math.min(window.innerWidth, 680);
+  H = canvas.height = Math.min(window.innerHeight * 0.75, 520);
+  CX = W/2; CY = H/2;
+  SR = Math.min(W,H) * 0.28;
+}
+window.addEventListener('resize', resize);
+resize();
+
+let analyser, freqData, running = false;
+let t = 0;
+let granCells = [];
+let sunspots = [];
+let plasmaLoops = [];
+let flares = [];
+
+// Convection cells (Benard cells on surface)
+function initGran(n) {
+  granCells = [];
+  for (let i=0;i<n;i++) {
+    const a = Math.random()*Math.PI*2;
+    const r = Math.random()*SR*0.9;
+    granCells.push({
+      x: CX + Math.cos(a)*r,
+      y: CY + Math.sin(a)*r,
+      r: 4+Math.random()*12,
+      phase: Math.random()*Math.PI*2,
+      speed: 0.01+Math.random()*0.02
+    });
+  }
+}
+
+// Sunspots (dark, cool)
+function initSpots(n) {
+  sunspots = [];
+  for (let i=0;i<n;i++) {
+    const a = Math.random()*Math.PI*2;
+    const r = Math.random()*SR*0.7+SR*0.05;
+    sunspots.push({
+      x: CX + Math.cos(a)*r,
+      y: CY + Math.sin(a)*r,
+      r: 6+Math.random()*14,
+      a, pR: r,
+      drift: (Math.random()-0.5)*0.003
+    });
+  }
+}
+
+// Plasma loops seeded from surface
+function initLoops(n) {
+  plasmaLoops = [];
+  for (let i=0;i<n;i++) {
+    const a = (i/n)*Math.PI*2 + Math.random()*0.4;
+    plasmaLoops.push({
+      a1: a,
+      a2: a + 0.3 + Math.random()*0.8,
+      height: 0.3 + Math.random()*0.7,
+      phase: Math.random()*Math.PI*2,
+      speed: 0.005+Math.random()*0.01,
+      energy: Math.random()
+    });
+  }
+}
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!running) {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const ac = new AudioContext();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.82;
+    src.connect(analyser);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    running = true;
+    document.getElementById('startBtn').textContent = '● OBSERVING';
+    document.getElementById('startBtn').classList.add('on');
+  }
+});
+
+function avg(arr,s,e){let v=0;for(let i=s;i<e;i++)v+=arr[i];return v/(e-s)/255}
+
+function drawCorona(bass, coronaExt) {
+  const coronaR = SR * (1.2 + coronaExt + bass * 0.5);
+  const grd = ctx.createRadialGradient(CX,CY,SR*0.95,CX,CY,coronaR);
+  grd.addColorStop(0,'rgba(255,160,30,0.35)');
+  grd.addColorStop(0.3,'rgba(255,100,10,0.15)');
+  grd.addColorStop(0.7,'rgba(255,50,0,0.05)');
+  grd.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=grd;
+  ctx.beginPath(); ctx.arc(CX,CY,coronaR,0,Math.PI*2); ctx.fill();
+
+  // Corona streamers
+  for (let i=0;i<8;i++) {
+    const sa = (i/8)*Math.PI*2+t*0.001;
+    const sl = SR*(1.1+coronaExt*0.8+bass*0.4);
+    const ex = CX+Math.cos(sa)*sl;
+    const ey = CY+Math.sin(sa)*sl;
+    const sg = ctx.createLinearGradient(CX+Math.cos(sa)*SR,CY+Math.sin(sa)*SR,ex,ey);
+    sg.addColorStop(0,'rgba(255,140,20,0.3)');
+    sg.addColorStop(1,'rgba(255,60,0,0)');
+    ctx.strokeStyle=sg;
+    ctx.lineWidth=SR*0.08;
+    ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(CX+Math.cos(sa)*SR*0.98, CY+Math.sin(sa)*SR*0.98);
+    ctx.quadraticCurveTo(
+      CX+Math.cos(sa+0.3)*(SR+sl)*0.5, CY+Math.sin(sa+0.3)*(SR+sl)*0.5,
+      ex, ey
+    );
+    ctx.stroke();
+  }
+}
+
+function drawSun(bass, mid, gran) {
+  // Main body gradient
+  const grd = ctx.createRadialGradient(CX-SR*0.2,CY-SR*0.2,SR*0.05,CX,CY,SR);
+  grd.addColorStop(0,`rgb(255,${240+bass*15},${100+bass*80})`);
+  grd.addColorStop(0.4,'rgb(255,210,50)');
+  grd.addColorStop(0.8,'rgb(255,140,20)');
+  grd.addColorStop(1,'rgb(230,80,0)');
+  ctx.fillStyle=grd;
+  ctx.beginPath(); ctx.arc(CX,CY,SR,0,Math.PI*2); ctx.fill();
+
+  // Granulation cells
+  granCells.forEach(cell => {
+    cell.phase += cell.speed * (1+mid*2);
+    const brightness = 0.5 + Math.sin(cell.phase)*0.5;
+    const dist = Math.sqrt((cell.x-CX)**2+(cell.y-CY)**2)/SR;
+    if (dist < 0.95) {
+      const opacity = (0.1 + brightness * gran * 0.25) * (1-dist*0.5);
+      ctx.fillStyle=`rgba(255,${Math.floor(220+brightness*35)},${Math.floor(brightness*100)},${opacity})`;
+      ctx.beginPath(); ctx.arc(cell.x,cell.y,cell.r*(0.8+brightness*0.2),0,Math.PI*2); ctx.fill();
+    }
+  });
+
+  // Limb darkening
+  const limbGrd = ctx.createRadialGradient(CX,CY,SR*0.5,CX,CY,SR);
+  limbGrd.addColorStop(0,'rgba(0,0,0,0)');
+  limbGrd.addColorStop(0.75,'rgba(0,0,0,0)');
+  limbGrd.addColorStop(1,'rgba(0,0,0,0.5)');
+  ctx.fillStyle=limbGrd;
+  ctx.beginPath(); ctx.arc(CX,CY,SR,0,Math.PI*2); ctx.fill();
+
+  // Sunspots
+  sunspots.forEach(sp => {
+    sp.a += sp.drift * (1+bass*0.5);
+    sp.x = CX + Math.cos(sp.a)*sp.pR;
+    sp.y = CY + Math.sin(sp.a)*sp.pR;
+    const dist = Math.sqrt((sp.x-CX)**2+(sp.y-CY)**2)/SR;
+    if (dist < 0.9) {
+      // Umbra
+      const umbraGrd = ctx.createRadialGradient(sp.x,sp.y,0,sp.x,sp.y,sp.r);
+      umbraGrd.addColorStop(0,'rgba(20,10,0,0.95)');
+      umbraGrd.addColorStop(0.6,'rgba(40,20,0,0.7)');
+      umbraGrd.addColorStop(1,'rgba(80,40,0,0)');
+      ctx.fillStyle=umbraGrd;
+      ctx.beginPath(); ctx.arc(sp.x,sp.y,sp.r*(1+bass*0.3),0,Math.PI*2); ctx.fill();
+    }
+  });
+}
+
+function drawPlasmaLoops(bass, mid, nLoops, flareForce) {
+  const loops = plasmaLoops.slice(0, nLoops);
+  loops.forEach((lp,li) => {
+    lp.phase += lp.speed * (1+mid*3);
+    lp.energy += (((freqData?freqData[Math.floor(li/nLoops*100)]:0)/255) - lp.energy)*0.1;
+    const animated = Math.sin(lp.phase)*0.15 + 1;
+
+    const p1x = CX + Math.cos(lp.a1)*SR;
+    const p1y = CY + Math.sin(lp.a1)*SR;
+    const p2x = CX + Math.cos(lp.a2)*SR;
+    const p2y = CY + Math.sin(lp.a2)*SR;
+
+    // Loop arc via bezier: control point raised above surface
+    const midA = (lp.a1+lp.a2)/2;
+    const loopH = SR * lp.height * animated * (1+bass*flareForce*0.4);
+    const cpx = CX + Math.cos(midA)*(SR+loopH);
+    const cpy = CY + Math.sin(midA)*(SR+loopH);
+
+    const energy = lp.energy;
+    const alpha = 0.4 + energy*0.5;
+    const r=Math.floor(255); const g=Math.floor(100+energy*120); const bl=Math.floor(energy*80);
+
+    // Outer glow
+    ctx.strokeStyle=`rgba(${r},${g},${bl},${alpha*0.3})`;
+    ctx.lineWidth=8+energy*6;
+    ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(p1x,p1y); ctx.quadraticCurveTo(cpx,cpy,p2x,p2y); ctx.stroke();
+    // Core
+    ctx.strokeStyle=`rgba(255,${Math.floor(200+energy*55)},${Math.floor(100+energy*100)},${alpha})`;
+    ctx.lineWidth=2+energy*2;
+    ctx.beginPath(); ctx.moveTo(p1x,p1y); ctx.quadraticCurveTo(cpx,cpy,p2x,p2y); ctx.stroke();
+    // Bright spine
+    ctx.strokeStyle=`rgba(255,255,${Math.floor(200+energy*55)},${energy*0.7})`;
+    ctx.lineWidth=0.8;
+    ctx.stroke();
+  });
+
+  // Solar flares — random eruptive events
+  if (bass > 0.5 && Math.random() < bass * 0.15) {
+    const fa = Math.random()*Math.PI*2;
+    flares.push({
+      a: fa,
+      age: 0,
+      maxAge: 30+Math.floor(Math.random()*40),
+      force: flareForce * bass * (0.5+Math.random()),
+      hue: 30+Math.random()*30
+    });
+  }
+  flares = flares.filter(f => {
+    const progress = f.age/f.maxAge;
+    f.age++;
+    const len = SR * f.force * Math.sin(progress*Math.PI) * 0.8;
+    const fx = CX+Math.cos(f.a)*(SR+len);
+    const fy = CY+Math.sin(f.a)*(SR+len);
+    const cx2 = CX+Math.cos(f.a+0.4)*(SR+len*0.6);
+    const cy2 = CY+Math.sin(f.a+0.4)*(SR+len*0.6);
+    const alpha = (1-progress)*0.9;
+    ctx.strokeStyle=`rgba(255,${Math.floor(150+f.hue*2)},50,${alpha})`;
+    ctx.lineWidth=4*(1-progress);
+    ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(CX+Math.cos(f.a)*SR, CY+Math.sin(f.a)*SR);
+    ctx.quadraticCurveTo(cx2,cy2,fx,fy);
+    ctx.stroke();
+    ctx.strokeStyle=`rgba(255,255,200,${alpha*0.5})`;
+    ctx.lineWidth=1;
+    ctx.stroke();
+    return f.age < f.maxAge;
+  });
+}
+
+function draw() {
+  requestAnimationFrame(draw);
+  t++;
+
+  if (running && analyser) analyser.getByteFrequencyData(freqData);
+  const bass = freqData ? avg(freqData,0,10) : 0;
+  const mid  = freqData ? avg(freqData,10,60) : 0;
+  const high = freqData ? avg(freqData,60,200) : 0;
+  const vol  = freqData ? avg(freqData,0,200) : 0;
+
+  const nLoops  = parseInt(document.getElementById('loops').value);
+  const fForce  = parseFloat(document.getElementById('flareForce').value);
+  const gran    = parseFloat(document.getElementById('gran').value);
+  const coronaE = parseFloat(document.getElementById('corona').value);
+
+  if (plasmaLoops.length !== nLoops) initLoops(nLoops);
+
+  // Space background
+  ctx.fillStyle='rgba(0,0,0,0.85)';
+  ctx.fillRect(0,0,W,H);
+
+  // Stars
+  if (t%120===0) {
+    for (let i=0;i<3;i++) {
+      const sx=Math.random()*W, sy=Math.random()*H;
+      const sr2=Math.sqrt((sx-CX)**2+(sy-CY)**2);
+      if (sr2>SR*1.5) {
+        ctx.fillStyle='rgba(255,255,255,0.6)';
+        ctx.fillRect(sx,sy,1,1);
+      }
+    }
+  }
+
+  drawCorona(bass, coronaE);
+  drawSun(bass, mid, gran);
+  drawPlasmaLoops(bass, mid, nLoops, fForce);
+
+  // Chromosphere rim
+  const chromGrd = ctx.createRadialGradient(CX,CY,SR*0.97,CX,CY,SR*1.03);
+  chromGrd.addColorStop(0,'rgba(255,80,20,0.25)');
+  chromGrd.addColorStop(1,'rgba(255,40,0,0)');
+  ctx.fillStyle=chromGrd;
+  ctx.beginPath(); ctx.arc(CX,CY,SR*1.03,0,Math.PI*2); ctx.fill();
+
+  // Clip to circle
+  ctx.save();
+  ctx.globalCompositeOperation='destination-in';
+  // Actually don't need to clip the whole scene — let the corona bleed out
+  ctx.restore();
+
+  document.getElementById('telemetry').textContent =
+    `SOLAR MONITOR — BASS ${(bass*100).toFixed(0).padStart(3,' ')}%  MID ${(mid*100).toFixed(0).padStart(3,' ')}%  HIGH ${(high*100).toFixed(0).padStart(3,' ')}%  FLARES ${flares.length}`;
+}
+
+initGran(120);
+initSpots(6);
+initLoops(7);
+
+ctx.fillStyle='#000';
+ctx.fillRect(0,0,W,H);
+draw();
+</script>
+</body>
+</html>

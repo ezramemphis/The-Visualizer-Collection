@@ -336,3 +336,6 @@ function draw() {
 }
 
 draw();
+
+// testing out this exporting thing
+export { settings, devPanel };

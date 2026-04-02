@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#050c06;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:monospace}
+canvas{display:block}
+#ui{display:flex;gap:14px;align-items:center;justify-content:center;margin-top:12px;flex-wrap:wrap}
+button{background:none;border:1px solid #2a4a2a;color:#4a8a4a;padding:5px 14px;border-radius:3px;cursor:pointer;font-family:monospace;font-size:11px;letter-spacing:1px}
+button:hover{border-color:#4a8a4a;color:#6aaa6a}
+button.on{border-color:#6aaa6a;color:#8aca8a}
+.ctrl{display:flex;flex-direction:column;align-items:center;gap:3px}
+.clbl{font-size:9px;color:#2a4a2a;letter-spacing:1px}
+input[type=range]{-webkit-appearance:none;width:80px;height:2px;background:#102010;border-radius:1px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:#3a7a3a;cursor:pointer}
+#tag{font-size:9px;color:#1a2a1a;letter-spacing:2px;margin-top:8px;text-align:center}
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <button id="startBtn">INOCULATE</button>
+  <div class="ctrl"><span class="clbl">GROWTH RATE</span><input type="range" id="growRate" min="0.5" max="6" value="2" step="0.1"></div>
+  <div class="ctrl"><span class="clbl">BRANCHING</span><input type="range" id="branch" min="0.01" max="0.25" value="0.08" step="0.01"></div>
+  <div class="ctrl"><span class="clbl">DECAY</span><input type="range" id="decay" min="0.001" max="0.04" value="0.008" step="0.001"></div>
+  <div class="ctrl"><span class="clbl">SPORE BURST</span><input type="range" id="spore" min="0" max="3" value="1" step="0.1"></div>
+  <button id="resetBtn">RESET</button>
+</div>
+<div id="tag">MYCELIUM NETWORK — BIOLUMINESCENT AUDIO GROWTH</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+function resize() {
+  W = canvas.width = Math.min(window.innerWidth, 720);
+  H = canvas.height = Math.min(window.innerHeight * 0.68, 460);
+}
+window.addEventListener('resize', resize);
+resize();
+
+let analyser, freqData, running = false;
+let hyphae = [];
+let spores = [];
+let t = 0;
+const MAX_HYPHAE = 600;
+
+class Hypha {
+  constructor(x, y, angle, gen, energy) {
+    this.x = x; this.y = y;
+    this.px = x; this.py = y;
+    this.angle = angle;
+    this.gen = gen || 0;
+    this.energy = energy || 1;
+    this.age = 0;
+    this.width = Math.max(0.3, 2.0 - gen * 0.25);
+    this.nutrient = 0; // pulses along
+    this.hue = 120 + (Math.random() - 0.5) * 40;
+    this.speed = 0.8 + Math.random() * 0.6;
+    this.dead = false;
+  }
+  grow(bass, mid, high, growRate, branchProb) {
+    if (this.dead) return;
+    this.age++;
+    // Wander with occasional audio-driven turns
+    const wobble = (Math.random() - 0.5) * 0.25 + mid * 0.6 * (Math.random() - 0.5);
+    this.angle += wobble;
+    // Subtle tropism toward screen center
+    const cx = W/2, cy = H/2;
+    const dx = cx - this.x, dy = cy - this.y;
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    if (dist > W * 0.3) this.angle += Math.atan2(dy,dx) * 0.015;
+
+    const speed = this.speed * growRate * (1 + bass * 2);
+    this.px = this.x; this.py = this.y;
+    this.x += Math.cos(this.angle) * speed;
+    this.y += Math.sin(this.angle) * speed;
+    this.energy -= 0.003 + high * 0.005;
+    this.nutrient = bass;
+
+    // Branching
+    if (hyphae.length < MAX_HYPHAE && Math.random() < branchProb * (1 + bass * 4)) {
+      const newAngle = this.angle + (Math.random() - 0.5) * 1.8;
+      hyphae.push(new Hypha(this.x, this.y, newAngle, this.gen + 1, this.energy * 0.7));
+    }
+
+    if (this.energy <= 0 || this.x < -50 || this.x > W+50 || this.y < -50 || this.y > H+50) {
+      this.dead = true;
+    }
+  }
+  draw(high, sporeAmt) {
+    if (this.age < 2) return;
+    const alpha = Math.min(1, this.energy * 1.5);
+    const glow = 0.3 + this.nutrient * 0.5;
+    // Main hypha strand
+    ctx.strokeStyle = `hsla(${this.hue},${60 + this.nutrient*40}%,${30 + this.nutrient*40}%,${alpha * 0.7})`;
+    ctx.lineWidth = this.width;
+    ctx.beginPath();
+    ctx.moveTo(this.px, this.py);
+    ctx.lineTo(this.x, this.y);
+    ctx.stroke();
+
+    // Bioluminescent core
+    ctx.strokeStyle = `hsla(${this.hue + 20},80%,${60 + this.nutrient*30}%,${alpha * glow * 0.5})`;
+    ctx.lineWidth = this.width * 0.4;
+    ctx.stroke();
+
+    // Spore bursts on tips with high freq
+    if (high > 0.3 && Math.random() < high * sporeAmt * 0.05 && this.gen < 3) {
+      spores.push({x: this.x, y: this.y, vx: (Math.random()-0.5)*3, vy: (Math.random()-0.5)*3,
+        life: 1, hue: this.hue, size: 2+Math.random()*3});
+    }
+  }
+}
+
+function initNetwork() {
+  hyphae = [];
+  spores = [];
+  // Seed from center
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    hyphae.push(new Hypha(W/2 + Math.cos(a)*10, H/2 + Math.sin(a)*10, a, 0, 1));
+  }
+}
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  ctx.fillStyle = '#050c06';
+  ctx.fillRect(0,0,W,H);
+  initNetwork();
+});
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!running) {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const ac = new AudioContext();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.88;
+    src.connect(analyser);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    running = true;
+    document.getElementById('startBtn').textContent = '● GROWING';
+    document.getElementById('startBtn').classList.add('on');
+  }
+});
+
+function avg(arr,s,e){let v=0;for(let i=s;i<e;i++)v+=arr[i];return v/(e-s)/255}
+
+function draw() {
+  requestAnimationFrame(draw);
+  t++;
+
+  if (running && analyser) analyser.getByteFrequencyData(freqData);
+  const bass = freqData ? avg(freqData, 0, 10) : 0;
+  const mid  = freqData ? avg(freqData, 10, 60) : 0;
+  const high = freqData ? avg(freqData, 60, 200) : 0;
+
+  const growRate  = parseFloat(document.getElementById('growRate').value);
+  const branchP   = parseFloat(document.getElementById('branch').value);
+  const decay     = parseFloat(document.getElementById('decay').value);
+  const sporeAmt  = parseFloat(document.getElementById('spore').value);
+
+  // Very slow fade for persistent network trails
+  ctx.fillStyle = `rgba(5,12,6,${decay})`;
+  ctx.fillRect(0,0,W,H);
+
+  // Grow and draw hyphae
+  ctx.lineCap = 'round';
+  for (let i = hyphae.length - 1; i >= 0; i--) {
+    const h = hyphae[i];
+    h.grow(bass, mid, high, growRate, branchP);
+    h.draw(high, sporeAmt);
+    if (h.dead) hyphae.splice(i, 1);
+  }
+
+  // Auto-respawn when network gets sparse + bass hit
+  if (hyphae.length < 20 || (hyphae.length < 100 && bass > 0.4 && Math.random() < 0.1)) {
+    const a = Math.random() * Math.PI * 2;
+    const rx = W/2 + (Math.random()-0.5)*W*0.3;
+    const ry = H/2 + (Math.random()-0.5)*H*0.3;
+    hyphae.push(new Hypha(rx, ry, a, 0, 1));
+  }
+
+  // Spores
+  for (let i = spores.length - 1; i >= 0; i--) {
+    const s = spores[i];
+    s.x += s.vx; s.y += s.vy;
+    s.vx *= 0.93; s.vy *= 0.93;
+    s.life -= 0.03;
+    if (s.life <= 0) { spores.splice(i, 1); continue; }
+    ctx.fillStyle = `hsla(${s.hue},80%,70%,${s.life * 0.8})`;
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size * s.life, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Nutrient pulse waves from center
+  if (bass > 0.35) {
+    const pulseR = (t % 120) / 120 * Math.min(W,H) * 0.6;
+    ctx.strokeStyle = `rgba(60,180,60,${bass * 0.15 * (1 - pulseR/(Math.min(W,H)*0.6))})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(W/2, H/2, pulseR, 0, Math.PI*2);
+    ctx.stroke();
+  }
+}
+
+initNetwork();
+// Slow passive movement without audio
+draw();
+</script>
+</body>
+</html>

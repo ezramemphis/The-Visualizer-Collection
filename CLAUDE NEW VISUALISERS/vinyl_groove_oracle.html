@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#111;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:monospace}
+canvas{border-radius:50%;display:block}
+#wrap{position:relative;width:520px;height:520px;margin:0 auto}
+#c{width:520px;height:520px;border-radius:50%}
+#arm-wrap{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+#ui{display:flex;gap:16px;align-items:center;justify-content:center;margin-top:16px;flex-wrap:wrap}
+button{background:none;border:1px solid #555;color:#ccc;padding:6px 18px;border-radius:20px;cursor:pointer;font-family:monospace;font-size:12px;letter-spacing:1px}
+button:hover{border-color:#aaa;color:#fff}
+button.active{border-color:#e44;color:#e44}
+.knob-row{display:flex;gap:20px;align-items:center}
+.knob{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:#777;letter-spacing:1px}
+.knob input[type=range]{-webkit-appearance:none;width:80px;height:2px;background:#333;border-radius:1px;outline:none}
+.knob input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#c33;cursor:pointer}
+#label{font-size:11px;color:#555;letter-spacing:2px;text-align:center;margin-top:8px}
+</style></head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="520" height="520"></canvas>
+  <svg id="arm-wrap" viewBox="0 0 520 520" xmlns="http://www.w3.org/2000/svg">
+    <g id="arm-g" transform-origin="430 80">
+      <line id="arm-line" x1="430" y1="80" x2="285" y2="260" stroke="#bbb" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="430" cy="80" r="10" fill="#444" stroke="#888" stroke-width="1.5"/>
+      <circle id="needle-dot" cx="285" cy="260" r="5" fill="#e44" opacity="0.9"/>
+    </g>
+  </svg>
+</div>
+<div id="ui">
+  <button id="startBtn">START</button>
+  <div class="knob-row">
+    <div class="knob"><span>SPEED</span><input type="range" id="speedKnob" min="0.2" max="3" step="0.1" value="1"></div>
+    <div class="knob"><span>GROOVE DEPTH</span><input type="range" id="depthKnob" min="0.5" max="4" step="0.1" value="1.5"></div>
+    <div class="knob"><span>WARMTH</span><input type="range" id="warmKnob" min="0" max="1" step="0.05" value="0.4"></div>
+  </div>
+</div>
+<div id="label">VINYL GROOVE ORACLE — ANALOG AUDIO RENDERER</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 520, H = 520, CX = W/2, CY = H/2;
+let analyser, freqData, running = false, angle = 0, animId;
+let grooveData = new Float32Array(360 * 2).fill(0);
+
+const startBtn = document.getElementById('startBtn');
+const speedKnob = document.getElementById('speedKnob');
+const depthKnob = document.getElementById('depthKnob');
+const warmKnob = document.getElementById('warmKnob');
+
+startBtn.addEventListener('click', async () => {
+  if (!running) {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const ac = new AudioContext();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.85;
+    src.connect(analyser);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    running = true;
+    startBtn.textContent = 'LIVE';
+    startBtn.classList.add('active');
+    draw();
+  }
+});
+
+function avg(arr, s, e) {
+  let v=0; for(let i=s;i<e;i++) v+=arr[i]; return v/(e-s)/255;
+}
+
+function drawRecord() {
+  const speed = parseFloat(speedKnob.value);
+  const depth = parseFloat(depthKnob.value);
+  const warmth = parseFloat(warmKnob.value);
+
+  if (running && analyser) {
+    analyser.getByteFrequencyData(freqData);
+  }
+
+  angle = (angle + speed * 0.008) % (Math.PI * 2);
+
+  // Vinyl base
+  const gradient = ctx.createRadialGradient(CX, CY, 20, CX, CY, 240);
+  gradient.addColorStop(0, '#1a0a0a');
+  gradient.addColorStop(0.15, '#111');
+  gradient.addColorStop(1, '#0a0a0a');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(CX, CY, 254, 0, Math.PI*2);
+  ctx.fill();
+
+  // Outer label ring
+  ctx.strokeStyle = '#1a1a1a';
+  ctx.lineWidth = 1;
+  for (let r = 50; r < 248; r += 2.4) {
+    ctx.beginPath();
+    ctx.arc(CX, CY, r, 0, Math.PI*2);
+    ctx.stroke();
+  }
+
+  // Draw grooves with audio-etched modulation
+  const bands = 80;
+  for (let b = 0; b < bands; b++) {
+    const t = b / bands;
+    const baseR = 65 + t * 170;
+    const freqBin = Math.floor(t * (freqData ? freqData.length * 0.6 : 200));
+    const audioVal = freqData ? freqData[freqBin] / 255 : 0;
+
+    const grooveAngle = angle + b * 0.12;
+
+    ctx.save();
+    const pts = 360;
+    ctx.beginPath();
+    for (let i = 0; i <= pts; i++) {
+      const a = (i / pts) * Math.PI * 2 + grooveAngle;
+      // Groove modulation: audio warps groove depth
+      const modAmp = audioVal * depth * 3.5;
+      const harmonic = Math.sin(a * (3 + b * 0.15)) * modAmp + Math.sin(a * (7 + b * 0.07)) * modAmp * 0.3;
+      const r = baseR + harmonic;
+      const x = CX + Math.cos(a) * r;
+      const y = CY + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+
+    // Color: warm red → dark vinyl depending on audio + warmth
+    const warmColor = `rgba(${Math.floor(80 + audioVal*120 + warmth*60)},${Math.floor(20 + audioVal*30)},${Math.floor(20 + audioVal*20)},${0.35 + audioVal * 0.45})`;
+    ctx.strokeStyle = warmColor;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Center label (warm amber/red)
+  const lg = ctx.createRadialGradient(CX, CY, 0, CX, CY, 60);
+  lg.addColorStop(0, '#3a1a1a');
+  lg.addColorStop(1, '#1a0808');
+  ctx.fillStyle = lg;
+  ctx.beginPath();
+  ctx.arc(CX, CY, 62, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = '#552222';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Spindle
+  ctx.fillStyle = '#888';
+  ctx.beginPath();
+  ctx.arc(CX, CY, 6, 0, Math.PI*2);
+  ctx.fill();
+
+  // Move needle arm based on playback position
+  const armAngle = -0.35 + (running ? Math.sin(Date.now()*0.0003)*0.02 : 0);
+  document.getElementById('arm-g').setAttribute('transform', `rotate(${armAngle * 57.3}, 430, 80)`);
+
+  // Bass pulse: shimmer on label
+  if (freqData) {
+    const bass = avg(freqData, 0, 10);
+    if (bass > 0.3) {
+      ctx.save();
+      ctx.globalAlpha = bass * 0.25;
+      ctx.fillStyle = '#ff4422';
+      ctx.beginPath();
+      ctx.arc(CX, CY, 60 + bass * 8, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  drawRecord();
+  animId = requestAnimationFrame(draw);
+}
+
+// Start passive animation even without mic
+draw();
+</script>
+</body>
+</html>

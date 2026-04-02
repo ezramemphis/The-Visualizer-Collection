@@ -45,7 +45,7 @@ const settings = {
   bassRadialBoost: 50,      // how much bass inflates radius
   midLineBoost:    2,       // mid multiplies secondary line width
   highLineBoost:   2,       // high multiplies primary line width
-  beatFlash:       1,       // bright flash on beat
+  beatFlash:       0,       // bright flash on beat (was 1 before)
   beatThreshold:   0.62,
 
   // Secondary layer

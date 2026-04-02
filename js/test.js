@@ -1,420 +1,352 @@
 // ===============================
-// VISUALIZER Q — STRANGE ATTRACTOR FIELD
-// Multiple particles walking the Lorenz / Thomas attractor simultaneously
-// Audio continuously morphs the attractor constants (σ, ρ, β for Lorenz)
-// causing the chaotic basin to reshape, fold, and bifurcate in real time
-// Beat triggers basin reset — particles scatter and re-converge
-// Projection plane, trail length, speed, all in dev panel
+// VISUALIZER — TUNNEL ZOOM
+// Concentric rings fly toward the viewer, pulsing and warping to audio.
 // ===============================
 
-import { ctx, canvas, analyser, freqData, timeData, devPanelActive } from "./visualizer.js";
+import { ctx, canvas, analyser, freqData, devPanelActive } from "./visualizer.js";
 import { registerSceneSettings } from "./visualizer.js";
 
-let frame = 0, width = canvas.width, height = canvas.height;
-function resize() { width = canvas.width; height = canvas.height; }
-window.addEventListener("resize", resize);
-function avg(s, e) { let v = 0; for (let i = s; i < e; i++) v += freqData[i]; return v / (e - s) / 255; }
+let width  = canvas.width;
+let height = canvas.height;
+let frame  = 0;
 
 /* ======================================================
- SETTINGS
+   AUDIO HELPERS
 ====================================================== */
+
+function avg(s, e) {
+  let v = 0; const len = Math.max(1, e - s);
+  for (let i = s; i < e; i++) v += freqData[i] || 0;
+  return (v / len) / 255;
+}
+
+/* ======================================================
+   SETTINGS
+====================================================== */
+
 const settings = {
-  // Attractor
-  attractorType:   0,     // 0=Lorenz, 1=Thomas, 2=Dadras, 3=Halvorsen
-  particleCount:   6,
-  trailLength:     280,
-  stepSize:        0.006, // integration step
-  stepsPerFrame:   3,     // multiple steps per frame
+  // --- TUNNEL ---
+  numRings:       24,      // how many rings exist at once
+  ringSpacing:    60,      // px between rings at rest
+  tunnelSpeed:    2.0,     // px/frame rings move toward viewer
+  bassSpeedBoost: 6.0,     // extra speed on bass hit
+  perspective:    0.6,     // 0=flat, 1=strong perspective zoom
+  vanishX:        0.0,     // vanishing point X offset (-1..1)
+  vanishY:        0.0,     // vanishing point Y offset (-1..1)
 
-  // Lorenz params (base — audio morphs these)
-  lorenzSigma:     10.0,
-  lorenzRho:       28.0,
-  lorenzBeta:      2.667,
+  // --- RING SHAPE ---
+  sides:          0,       // 0=circle, 3-8=polygon
+  twist:          0.0,     // rotation offset per ring (radians)
+  twistSpeed:     0.002,   // auto-advance twist
+  warpAmp:        0.0,     // radial warp (0=perfect circle, 1=wild)
+  warpFreq:       6,       // number of warp bumps around ring
+  bassWarpBoost:  1.5,     // bass multiplies warp amplitude
 
-  // Thomas params
-  thomasB:         0.208,
+  // --- LINE ---
+  lineWidthBase:  1.5,
+  lineWidthScale: 1,       // 0=constant, 1=thicker near viewer
+  roundCaps:      0,
 
-  // Audio morphing
-  bassToRho:       18,    // bass adds to rho (dramatic bifurcation)
-  midToSigma:      6,     // mid shifts sigma
-  highToBeta:      1.5,   // high shifts beta
-  audioMorphSpeed: 0.15,  // lerp speed toward audio target
+  // --- COLOR ---
+  colorMode:      2,       // 0=white, 1=fixed hue, 2=hue per-ring, 3=hue cycle
+  hue:            200,
+  hueCycleSpeed:  0.4,
+  hueSpread:      120,     // hue range across rings (mode 2)
+  saturation:     85,
+  lightnessNear:  80,      // lightness of near rings
+  lightnessFar:   20,      // lightness of far rings
 
-  // Projection
-  projX:           0,     // 0=XY, 1=XZ, 2=YZ, 3=rotating
-  projRotSpeed:    0.003, // rotation speed when projX=3
-  projScale:       9,     // world→screen scale
-  projOffsetZ:     25,    // Z offset for perspective feel
-  perspective:     1,     // 0=ortho 1=perspective
+  // --- FADE ---
+  alphaFar:       0.08,    // alpha of most distant ring
+  alphaNear:      0.95,    // alpha of closest ring
 
-  // Beat response
-  beatThreshold:   0.62,
-  beatReset:       1,     // scatter particles on beat
-  beatScatter:     8,     // scatter force
-  beatFlash:       1,
+  // --- BACKGROUND ---
+  bgAlpha:        0.2,
+  bgColor:        0,       // 0=black, 1=dark hue tint
 
-  // Visual
-  bgAlpha:         0.08,
-  lineWidth:       1.2,
-  trailFade:       1,     // 1=alpha fades along trail
-  glowMode:        1,     // glow on near-center segments
-  glowBlur:        6,
-  colorMode:       0,     // 0=per-particle 1=velocity 2=z-height
-
-  // Color
-  hueBase:         200,
-  hueSpread:       260,
-  hueTimeSpeed:    0.2,
-  saturation:      95,
-  lightness:       58,
+  // --- EXTRAS ---
+  glow:           1,
+  glowBlur:       12,
+  glowAlpha:      0.3,
+  centerDot:      1,       // pulsing dot at vanish point
+  centerDotSize:  6,
+  scanlines:      0,
+  scanlineAlpha:  0.1,
 };
 
 registerSceneSettings(settings);
 
 /* ======================================================
- PARTICLE TRAILS
+   STATE
 ====================================================== */
-const MAX_PARTICLES = 20;
-const MAX_TRAIL     = 600;
 
-// Flat typed arrays: [particle][point][xyz]
-const trailX = new Float32Array(MAX_PARTICLES * MAX_TRAIL);
-const trailY = new Float32Array(MAX_PARTICLES * MAX_TRAIL);
-const trailZ = new Float32Array(MAX_PARTICLES * MAX_TRAIL);
-const trailLen = new Int32Array(MAX_PARTICLES);  // current fill
-const headIdx  = new Int32Array(MAX_PARTICLES);  // ring buffer head
-
-// Current attractor state per particle
-const px = new Float32Array(MAX_PARTICLES);
-const py = new Float32Array(MAX_PARTICLES);
-const pz = new Float32Array(MAX_PARTICLES);
-
-// Smoothed attractor params
-let smoothSigma = 10.0, smoothRho = 28.0, smoothBeta = 2.667;
-let smoothB     = 0.208;
-
-function initParticle(i) {
-  px[i] = (Math.random() - 0.5) * 2 + 0.1;
-  py[i] = (Math.random() - 0.5) * 2;
-  pz[i] = 20 + Math.random() * 10;
-  trailLen[i] = 0;
-  headIdx[i]  = 0;
-}
-
-function initAllParticles() {
-  const n = Math.floor(settings.particleCount);
-  for (let i = 0; i < n; i++) initParticle(i);
-}
-initAllParticles();
+let globalHue   = settings.hue;
+let ringOffset  = 0;      // rolling offset so rings appear continuous
+let twistOffset = 0;
 
 /* ======================================================
- ATTRACTOR DERIVATIVES
+   RESIZE
 ====================================================== */
-function lorenz(x, y, z) {
-  const dx = smoothSigma * (y - x);
-  const dy = x * (smoothRho - z) - y;
-  const dz = x * y - smoothBeta * z;
-  return [dx, dy, dz];
-}
 
-function thomas(x, y, z) {
-  const b = smoothB;
-  const dx = Math.sin(y) - b * x;
-  const dy = Math.sin(z) - b * y;
-  const dz = Math.sin(x) - b * z;
-  return [dx, dy, dz];
-}
-
-function dadras(x, y, z) {
-  const a=3, b=2.7, c=1.7, d=2, e=9;
-  const dx = y - a*x + b*y*z;
-  const dy = c*y - x*z + z;
-  const dz = d*x*y - e*z;
-  return [dx, dy, dz];
-}
-
-function halvorsen(x, y, z) {
-  const a = 1.4;
-  const dx = -a*x - 4*y - 4*z - y*y;
-  const dy = -a*y - 4*z - 4*x - z*z;
-  const dz = -a*z - 4*x - 4*y - x*x;
-  return [dx, dy, dz];
-}
-
-function deriv(x, y, z) {
-  switch (Math.floor(settings.attractorType)) {
-    case 1: return thomas(x, y, z);
-    case 2: return dadras(x, y, z);
-    case 3: return halvorsen(x, y, z);
-    default: return lorenz(x, y, z);
-  }
-}
-
-function rk4Step(x, y, z, h) {
-  const [k1x,k1y,k1z] = deriv(x, y, z);
-  const [k2x,k2y,k2z] = deriv(x+h/2*k1x, y+h/2*k1y, z+h/2*k1z);
-  const [k3x,k3y,k3z] = deriv(x+h/2*k2x, y+h/2*k2y, z+h/2*k2z);
-  const [k4x,k4y,k4z] = deriv(x+h*k3x,   y+h*k3y,   z+h*k3z);
-  return [
-    x + h/6*(k1x+2*k2x+2*k3x+k4x),
-    y + h/6*(k1y+2*k2y+2*k3y+k4y),
-    z + h/6*(k1z+2*k2z+2*k3z+k4z),
-  ];
-}
+function resize() { width = canvas.width; height = canvas.height; }
+window.addEventListener("resize", resize);
+resize();
 
 /* ======================================================
- PROJECTION
+   DEV PANEL
 ====================================================== */
-let projAngle = 0;
 
-function project(x, y, z) {
-  const scale = settings.projScale;
-  const type  = Math.floor(settings.projX);
-
-  let ax, ay, az;
-  if (type === 3) {
-    // rotating projection in XZ plane over time
-    const c = Math.cos(projAngle), s = Math.sin(projAngle);
-    ax = x * c + z * s;
-    ay = y;
-    az = -x * s + z * c;
-  } else if (type === 1) {
-    ax = x; ay = z; az = y;
-  } else if (type === 2) {
-    ax = y; ay = z; az = x;
-  } else {
-    ax = x; ay = y; az = z;
-  }
-
-  if (settings.perspective) {
-    const d  = settings.projOffsetZ + az;
-    const sc = scale * 8 / Math.max(1, d);
-    return [ax * sc, ay * sc];
-  } else {
-    return [ax * scale, ay * scale];
-  }
-}
-
-/* ======================================================
- STATE
-====================================================== */
-let lastBass = 0;
-let beatFlashAmt = 0;
-
-/* ======================================================
- DEV PANEL
-====================================================== */
 let devPanel;
+
 function createDevPanel() {
   devPanel = document.createElement("div");
   Object.assign(devPanel.style, {
-    position:"fixed",top:"5px",left:"5px",padding:"8px 10px",
-    background:"rgba(0,0,0,0.87)",color:"#fff",fontFamily:"sans-serif",
-    fontSize:"12px",borderRadius:"6px",zIndex:9999,
-    display:"none",maxHeight:"95vh",overflowY:"auto",width:"218px",
+    position: "fixed", top: "5px", left: "5px",
+    padding: "10px 14px", background: "rgba(0,0,0,0.88)",
+    color: "#eee", fontFamily: "monospace", fontSize: "11px",
+    borderRadius: "6px", zIndex: 9999,
+    display: "none", maxHeight: "95vh", overflowY: "auto",
+    lineHeight: "1.9",
   });
+
   devPanel.innerHTML = `
-  <b>STRANGE ATTRACTOR</b><hr>
-  <b>ATTRACTOR</b><br>
-  Type <input type="range" id="attractorType" min="0" max="3" step="1">
-  <span id="attractorTypeLabel" style="font-size:10px;color:#0cf"> Lorenz</span><br>
-  Particles <input type="range" id="particleCount" min="1" max="20" step="1"><br>
-  Trail Length <input type="range" id="trailLength" min="20" max="600" step="5"><br>
-  Step Size <input type="range" id="stepSize" min="0.001" max="0.02" step="0.001"><br>
-  Steps/Frame <input type="range" id="stepsPerFrame" min="1" max="12" step="1"><br>
-  <hr><b>LORENZ PARAMS</b><br>
-  σ Sigma <input type="range" id="lorenzSigma" min="1" max="30" step="0.1"><br>
-  ρ Rho <input type="range" id="lorenzRho" min="5" max="60" step="0.2"><br>
-  β Beta <input type="range" id="lorenzBeta" min="0.1" max="6" step="0.05"><br>
-  Thomas b <input type="range" id="thomasB" min="0.05" max="0.5" step="0.005"><br>
-  <hr><b>AUDIO MORPH</b><br>
-  Bass→Rho <input type="range" id="bassToRho" min="0" max="50"><br>
-  Mid→Sigma <input type="range" id="midToSigma" min="0" max="20"><br>
-  High→Beta <input type="range" id="highToBeta" min="0" max="4" step="0.1"><br>
-  Morph Speed <input type="range" id="audioMorphSpeed" min="0.01" max="1" step="0.01"><br>
-  <hr><b>PROJECTION</b><br>
-  Proj Plane <input type="range" id="projX" min="0" max="3" step="1">
-  <span id="projXLabel" style="font-size:10px;color:#0cf"> XY</span><br>
-  Rot Speed <input type="range" id="projRotSpeed" min="0" max="0.02" step="0.0005"><br>
-  Scale <input type="range" id="projScale" min="2" max="30"><br>
-  Perspective <input type="range" id="perspective" min="0" max="1" step="1"><br>
-  <hr><b>BEAT</b><br>
-  Beat Threshold <input type="range" id="beatThreshold" min="0.2" max="0.95" step="0.01"><br>
-  Beat Reset <input type="range" id="beatReset" min="0" max="1" step="1"><br>
-  Beat Scatter <input type="range" id="beatScatter" min="0" max="30"><br>
-  Beat Flash <input type="range" id="beatFlash" min="0" max="1" step="1"><br>
-  <hr><b>VISUAL</b><br>
-  BG Alpha <input type="range" id="bgAlpha" min="0.01" max="0.5" step="0.01"><br>
-  Line Width <input type="range" id="lineWidth" min="0.3" max="5" step="0.1"><br>
-  Trail Fade <input type="range" id="trailFade" min="0" max="1" step="1"><br>
-  Glow Mode <input type="range" id="glowMode" min="0" max="1" step="1"><br>
-  Glow Blur <input type="range" id="glowBlur" min="0" max="20"><br>
-  Color Mode <input type="range" id="colorMode" min="0" max="2" step="1">
-  <span id="colorModeLabel" style="font-size:10px;color:#0cf"> per-particle</span><br>
-  <hr><b>COLOR</b><br>
-  Hue Base <input type="range" id="hueBase" min="0" max="360"><br>
-  Hue Spread <input type="range" id="hueSpread" min="0" max="360"><br>
-  Hue Time Speed <input type="range" id="hueTimeSpeed" min="0" max="2" step="0.05"><br>
-  Saturation <input type="range" id="saturation" min="0" max="100"><br>
-  Lightness <input type="range" id="lightness" min="10" max="90"><br>
-  `;
+<b>◉ TUNNEL ZOOM</b><hr>
+
+<b>— TUNNEL —</b><br>
+Num Rings         <input type="range" id="numRings"        min="4" max="60" style="width:110px"><br>
+Ring Spacing      <input type="range" id="ringSpacing"     min="10" max="200" style="width:110px"><br>
+Tunnel Speed      <input type="range" id="tunnelSpeed"     min="0" max="20" step="0.1" style="width:110px"><br>
+Bass Speed Boost  <input type="range" id="bassSpeedBoost"  min="0" max="40" step="0.1" style="width:110px"><br>
+Perspective       <input type="range" id="perspective"     min="0" max="1" step="0.01" style="width:110px"><br>
+Vanish X          <input type="range" id="vanishX"         min="-1" max="1" step="0.01" style="width:110px"><br>
+Vanish Y          <input type="range" id="vanishY"         min="-1" max="1" step="0.01" style="width:110px"><br>
+
+<hr><b>— RING SHAPE —</b><br>
+Sides <small>(0=circle 3-8=polygon)</small>
+                  <input type="range" id="sides"           min="0" max="8" step="1" style="width:110px"><br>
+Twist per Ring    <input type="range" id="twist"           min="-0.5" max="0.5" step="0.005" style="width:110px"><br>
+Twist Auto Speed  <input type="range" id="twistSpeed"      min="-0.02" max="0.02" step="0.0005" style="width:110px"><br>
+Warp Amplitude    <input type="range" id="warpAmp"         min="0" max="1" step="0.01" style="width:110px"><br>
+Warp Frequency    <input type="range" id="warpFreq"        min="1" max="20" step="1" style="width:110px"><br>
+Bass Warp Boost   <input type="range" id="bassWarpBoost"   min="0" max="5" step="0.05" style="width:110px"><br>
+
+<hr><b>— LINE —</b><br>
+Line Width Base   <input type="range" id="lineWidthBase"   min="0.3" max="8" step="0.1" style="width:110px"><br>
+Scale with Depth <small>(0/1)</small>
+                  <input type="range" id="lineWidthScale"  min="0" max="1" step="1" style="width:110px"><br>
+Round Caps <small>(0/1)</small>
+                  <input type="range" id="roundCaps"       min="0" max="1" step="1" style="width:110px"><br>
+
+<hr><b>— COLOR —</b><br>
+Color Mode <small>(0=white 1=fixed 2=per-ring 3=cycle)</small>
+                  <input type="range" id="colorMode"       min="0" max="3" step="1" style="width:110px"><br>
+Hue               <input type="range" id="hue"            min="0" max="360" style="width:110px"><br>
+Hue Cycle Speed   <input type="range" id="hueCycleSpeed"  min="-3" max="3" step="0.05" style="width:110px"><br>
+Hue Spread        <input type="range" id="hueSpread"      min="0" max="360" style="width:110px"><br>
+Saturation        <input type="range" id="saturation"     min="0" max="100" style="width:110px"><br>
+Lightness Near    <input type="range" id="lightnessNear"  min="10" max="100" style="width:110px"><br>
+Lightness Far     <input type="range" id="lightnessFar"   min="0" max="80" style="width:110px"><br>
+
+<hr><b>— FADE —</b><br>
+Alpha Far         <input type="range" id="alphaFar"        min="0" max="0.5" step="0.005" style="width:110px"><br>
+Alpha Near        <input type="range" id="alphaNear"       min="0.1" max="1" step="0.01" style="width:110px"><br>
+
+<hr><b>— BACKGROUND —</b><br>
+BG Trail Alpha    <input type="range" id="bgAlpha"         min="0.01" max="1" step="0.005" style="width:110px"><br>
+BG Tint <small>(0=black 1=hue)</small>
+                  <input type="range" id="bgColor"         min="0" max="1" step="1" style="width:110px"><br>
+
+<hr><b>— EXTRAS —</b><br>
+Glow <small>(0/1)</small>
+                  <input type="range" id="glow"            min="0" max="1" step="1" style="width:110px"><br>
+Glow Blur         <input type="range" id="glowBlur"        min="0" max="40" style="width:110px"><br>
+Glow Alpha        <input type="range" id="glowAlpha"       min="0" max="1" step="0.01" style="width:110px"><br>
+Center Dot <small>(0/1)</small>
+                  <input type="range" id="centerDot"       min="0" max="1" step="1" style="width:110px"><br>
+Center Dot Size   <input type="range" id="centerDotSize"   min="1" max="40" style="width:110px"><br>
+Scanlines <small>(0/1)</small>
+                  <input type="range" id="scanlines"       min="0" max="1" step="1" style="width:110px"><br>
+Scanline Alpha    <input type="range" id="scanlineAlpha"   min="0" max="0.5" step="0.01" style="width:110px"><br>
+`;
+
   document.body.appendChild(devPanel);
-
-  const attractorNames = ["Lorenz","Thomas","Dadras","Halvorsen"];
-  const projNames      = ["XY","XZ","YZ","Rotating"];
-  const colorNames     = ["per-particle","velocity","z-height"];
-  const aLabel  = devPanel.querySelector("#attractorTypeLabel");
-  const pLabel  = devPanel.querySelector("#projXLabel");
-  const cLabel  = devPanel.querySelector("#colorModeLabel");
-
   Object.keys(settings).forEach(key => {
     const el = devPanel.querySelector(`#${key}`);
     if (!el) return;
     el.value = settings[key];
-    el.addEventListener("input", e => {
-      settings[key] = parseFloat(e.target.value);
-      if (key === "attractorType" && aLabel) aLabel.textContent = " " + attractorNames[Math.floor(settings.attractorType)];
-      if (key === "projX"         && pLabel) pLabel.textContent = " " + projNames[Math.floor(settings.projX)];
-      if (key === "colorMode"     && cLabel) cLabel.textContent = " " + colorNames[Math.floor(settings.colorMode)];
-      if (key === "particleCount") initAllParticles();
-    });
+    el.addEventListener("input", e => { settings[key] = parseFloat(e.target.value); });
   });
 }
+
 createDevPanel();
 
 /* ======================================================
- DRAW LOOP
+   DRAW RING
 ====================================================== */
+
+function drawRing(cx, cy, radius, ringIdx, t, bass) {
+  if (radius <= 0) return;
+
+  // t = 0 (far) .. 1 (near)
+  const n    = Math.round(settings.numRings);
+  const warp = settings.warpAmp * (1 + bass * settings.bassWarpBoost);
+  const rot  = twistOffset + ringIdx * settings.twist;
+
+  let hue;
+  if (settings.colorMode === 0)      hue = 0;
+  else if (settings.colorMode === 1) hue = globalHue;
+  else if (settings.colorMode === 2) hue = (globalHue + (ringIdx / n) * settings.hueSpread) % 360;
+  else                               hue = globalHue;
+
+  const alpha = settings.alphaFar + t * (settings.alphaNear - settings.alphaFar);
+  const lightness = settings.lightnessFar + t * (settings.lightnessNear - settings.lightnessFar);
+
+  const color = settings.colorMode === 0
+    ? `rgba(255,255,255,${alpha})`
+    : `hsla(${hue},${settings.saturation}%,${lightness}%,${alpha})`;
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = settings.lineWidthBase * (settings.lineWidthScale ? (0.3 + t * 0.7) : 1);
+  ctx.lineCap     = settings.roundCaps ? "round" : "butt";
+
+  const sides = Math.round(settings.sides);
+
+  ctx.beginPath();
+
+  if (sides < 3) {
+    // circle with optional warp
+    if (warp < 0.01) {
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    } else {
+      const steps = 120;
+      for (let i = 0; i <= steps; i++) {
+        const a = (i / steps) * Math.PI * 2 + rot;
+        const bump = 1 + warp * Math.sin(a * settings.warpFreq + frame * 0.05);
+        const r = radius * bump;
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+    }
+  } else {
+    // polygon with optional warp
+    for (let i = 0; i <= sides; i++) {
+      const a = (i / sides) * Math.PI * 2 + rot;
+      const bump = 1 + warp * Math.sin(a * settings.warpFreq + frame * 0.05);
+      const r = radius * bump;
+      const x = cx + Math.cos(a) * r;
+      const y = cy + Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+  }
+
+  ctx.closePath();
+  ctx.stroke();
+}
+
+/* ======================================================
+   DRAW
+====================================================== */
+
 function draw() {
   requestAnimationFrame(draw);
   if (devPanel) devPanel.style.display = devPanelActive ? "block" : "none";
-  analyser.getByteFrequencyData(freqData);
-  analyser.getByteTimeDomainData(timeData);
 
-  const bass = avg(0, 12);
-  const mid  = avg(20, 90);
-  const high = avg(80, 180);
+  analyser.getByteFrequencyData(freqData);
   frame++;
 
-  // Smooth attractor params toward audio targets
-  const lr = settings.audioMorphSpeed;
-  smoothRho   += (settings.lorenzRho   + bass * settings.bassToRho  - smoothRho)   * lr;
-  smoothSigma += (settings.lorenzSigma + mid  * settings.midToSigma - smoothSigma) * lr;
-  smoothBeta  += (settings.lorenzBeta  + high * settings.highToBeta - smoothBeta)  * lr;
-  smoothB     += (settings.thomasB - smoothB) * lr;
+  const bass = avg(0, 20);
+  const high = avg(80, 160);
 
-  projAngle += settings.projRotSpeed * (1 + mid * 0.5);
+  globalHue   = (settings.hue + frame * settings.hueCycleSpeed) % 360;
+  twistOffset += settings.twistSpeed;
+  ringOffset  += settings.tunnelSpeed + bass * settings.bassSpeedBoost;
 
-  // Beat
-  if (bass > settings.beatThreshold && lastBass <= settings.beatThreshold) {
-    if (settings.beatFlash) beatFlashAmt = 1.0;
-    if (settings.beatReset) {
-      const n = Math.floor(settings.particleCount);
-      for (let i = 0; i < n; i++) {
-        px[i] += (Math.random() - 0.5) * settings.beatScatter;
-        py[i] += (Math.random() - 0.5) * settings.beatScatter;
-        pz[i] += (Math.random() - 0.5) * settings.beatScatter * 0.5;
-        trailLen[i] = 0; headIdx[i] = 0;
-      }
-    }
-  }
-  lastBass = bass;
-  if (beatFlashAmt > 0) beatFlashAmt *= 0.82;
-
-  ctx.fillStyle = `rgba(0,0,0,${settings.bgAlpha})`;
+  /* BG */
+  ctx.fillStyle = settings.bgColor
+    ? `hsla(${globalHue},30%,5%,${settings.bgAlpha})`
+    : `rgba(0,0,0,${settings.bgAlpha})`;
   ctx.fillRect(0, 0, width, height);
 
-  if (beatFlashAmt > 0.02) {
-    const hue = (settings.hueBase + frame * settings.hueTimeSpeed) % 360;
-    ctx.fillStyle = `hsla(${hue},100%,65%,${beatFlashAmt * 0.1})`;
-    ctx.fillRect(0, 0, width, height);
-  }
+  const cx = width  / 2 + settings.vanishX * width  / 2;
+  const cy = height / 2 + settings.vanishY * height / 2;
+  const n  = Math.round(settings.numRings);
+  const sp = settings.ringSpacing;
+  const total = n * sp;
 
-  ctx.save();
-  ctx.translate(width / 2, height / 2);
-  ctx.globalCompositeOperation = "lighter";
+  /* draw back to front so near rings overlap far */
+  function renderRings(glowPass) {
+    for (let i = n - 1; i >= 0; i--) {
+      // raw distance from vanish point
+      const rawDist = ((i * sp - (ringOffset % total) + total) % total);
+      if (rawDist <= 0) continue;
 
-  const n        = Math.floor(settings.particleCount);
-  const tLen     = Math.min(Math.floor(settings.trailLength), MAX_TRAIL);
-  const h        = settings.stepSize;
-  const spf      = Math.floor(settings.stepsPerFrame);
-  const colorMode = Math.floor(settings.colorMode);
+      // perspective: near rings grow faster
+      const perspFrac = settings.perspective;
+      const scale = 1 / Math.pow(rawDist / total, perspFrac + 0.001);
+      const radius = rawDist * scale * 0.5;
 
-  for (let i = 0; i < n; i++) {
-    // Integrate N steps, push to ring buffer
-    for (let s = 0; s < spf; s++) {
-      const [nx, ny, nz] = rk4Step(px[i], py[i], pz[i], h);
-      // Clamp to avoid blow-up
-      px[i] = Math.max(-100, Math.min(100, nx));
-      py[i] = Math.max(-100, Math.min(100, ny));
-      pz[i] = Math.max(-100, Math.min(100, nz));
+      // clip absurdly large rings
+      const maxR = Math.sqrt(width * width + height * height);
+      if (radius > maxR * 1.5) continue;
 
-      const idx = headIdx[i] % MAX_TRAIL;
-      trailX[i * MAX_TRAIL + idx] = px[i];
-      trailY[i * MAX_TRAIL + idx] = py[i];
-      trailZ[i * MAX_TRAIL + idx] = pz[i];
-      headIdx[i]++;
-      if (trailLen[i] < MAX_TRAIL) trailLen[i]++;
-    }
+      // depth fraction (0=far, 1=near)
+      const t = 1 - rawDist / total;
 
-    // Draw trail
-    const len    = Math.min(trailLen[i], tLen);
-    const head   = headIdx[i];
-    const baseHue = (settings.hueBase + (i / n) * settings.hueSpread + frame * settings.hueTimeSpeed) % 360;
+      // freq-modulate each ring's size slightly
+      const binIdx = Math.round((i / n) * 120);
+      const freqMod = (freqData[binIdx] || 0) / 255;
+      const modRadius = radius * (1 + freqMod * 0.15);
 
-    // Glow pass
-    if (settings.glowMode) {
-      ctx.beginPath();
-      let firstPt = true;
-      for (let t = len - 1; t >= 0; t--) {
-        const ring = (head - 1 - t + MAX_TRAIL * 2) % MAX_TRAIL;
-        const wx = trailX[i * MAX_TRAIL + ring];
-        const wy = trailY[i * MAX_TRAIL + ring];
-        const wz = trailZ[i * MAX_TRAIL + ring];
-        const [sx, sy] = project(wx, wy, wz);
-        if (firstPt) { ctx.moveTo(sx, sy); firstPt = false; }
-        else ctx.lineTo(sx, sy);
-      }
-      ctx.shadowColor = `hsl(${baseHue},100%,70%)`;
-      ctx.shadowBlur  = settings.glowBlur;
-      ctx.strokeStyle = `hsla(${baseHue},${settings.saturation}%,${settings.lightness}%,0.15)`;
-      ctx.lineWidth   = settings.lineWidth * 2.5;
-      ctx.stroke();
-      ctx.shadowBlur  = 0;
-    }
-
-    // Crisp trail — segment by segment for fade + color
-    for (let t = len - 1; t >= 1; t--) {
-      const r0  = (head - 1 - t     + MAX_TRAIL * 2) % MAX_TRAIL;
-      const r1  = (head - 1 - t + 1 + MAX_TRAIL * 2) % MAX_TRAIL;
-      const wx0 = trailX[i*MAX_TRAIL+r0], wy0 = trailY[i*MAX_TRAIL+r0], wz0 = trailZ[i*MAX_TRAIL+r0];
-      const wx1 = trailX[i*MAX_TRAIL+r1], wy1 = trailY[i*MAX_TRAIL+r1], wz1 = trailZ[i*MAX_TRAIL+r1];
-      const [sx0, sy0] = project(wx0, wy0, wz0);
-      const [sx1, sy1] = project(wx1, wy1, wz1);
-
-      const tFrac = t / len;
-      const alpha = settings.trailFade ? tFrac * 0.8 : 0.6;
-
-      let hue = baseHue;
-      if (colorMode === 1) {
-        // velocity-colored
-        const vel = Math.sqrt((wx1-wx0)**2 + (wy1-wy0)**2 + (wz1-wz0)**2);
-        hue = (settings.hueBase + vel * 60) % 360;
-      } else if (colorMode === 2) {
-        // z-height colored
-        hue = (settings.hueBase + ((wz0 + 30) / 60) * settings.hueSpread) % 360;
-      }
-
-      ctx.beginPath();
-      ctx.moveTo(sx0, sy0);
-      ctx.lineTo(sx1, sy1);
-      ctx.strokeStyle = `hsla(${hue},${settings.saturation}%,${settings.lightness}%,${alpha})`;
-      ctx.lineWidth   = settings.lineWidth * (0.4 + tFrac * 0.8);
-      ctx.stroke();
+      drawRing(cx, cy, modRadius, i, t, bass);
     }
   }
 
-  ctx.restore();
+  /* GLOW PASS */
+  if (settings.glow) {
+    ctx.save();
+    ctx.filter      = `blur(${settings.glowBlur}px)`;
+    ctx.globalAlpha = settings.glowAlpha;
+    renderRings(true);
+    ctx.restore();
+    ctx.filter = "none";
+  }
+
+  /* MAIN */
+  renderRings(false);
+
+  /* CENTER DOT */
+  if (settings.centerDot) {
+    const r   = settings.centerDotSize * (1 + bass * 2);
+    const cStr = settings.colorMode === 0 ? "255,255,255" : hslToRgbStr(globalHue, settings.saturation, 70);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, `rgba(${cStr},0.9)`);
+    g.addColorStop(1, `rgba(${cStr},0)`);
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* SCANLINES */
+  if (settings.scanlines) {
+    ctx.save();
+    ctx.globalAlpha = settings.scanlineAlpha;
+    ctx.fillStyle   = "#000";
+    for (let y = 0; y < height; y += 4) ctx.fillRect(0, y, width, 2);
+    ctx.restore();
+  }
+}
+
+function hslToRgbStr(h, s, l) {
+  s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  return `${Math.round(f(0)*255)},${Math.round(f(8)*255)},${Math.round(f(4)*255)}`;
 }
 
 draw();
+
+export { settings, devPanel };

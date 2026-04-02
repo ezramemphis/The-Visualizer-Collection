@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#1c1208;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:'Courier New',monospace}
+canvas{display:block;border-radius:4px}
+#ui{display:flex;gap:14px;align-items:center;justify-content:center;margin-top:12px;flex-wrap:wrap}
+button{background:none;border:1px solid #553322;color:#997755;padding:5px 14px;border-radius:3px;cursor:pointer;font-family:'Courier New';font-size:11px;letter-spacing:1px}
+button:hover{border-color:#997755;color:#ccaa88}
+button.on{border-color:#cc8855;color:#eebb88;text-shadow:0 0 6px #cc6633}
+.ctrl{display:flex;flex-direction:column;align-items:center;gap:3px}
+.clbl{font-size:9px;color:#553322;letter-spacing:1px}
+input[type=range]{-webkit-appearance:none;width:80px;height:2px;background:#2a1a0a;border-radius:1px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:#cc8855;cursor:pointer}
+#tag{font-size:9px;color:#2a1a08;letter-spacing:2px;text-align:center;margin-top:8px}
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <button id="startBtn">◀◀ REC ▶▶</button>
+  <div class="ctrl"><span class="clbl">TAPE SPEED</span><input type="range" id="tapeSpeed" min="0.5" max="4" value="1.5" step="0.1"></div>
+  <div class="ctrl"><span class="clbl">WARMTH</span><input type="range" id="warmth" min="0" max="1" value="0.6" step="0.05"></div>
+  <div class="ctrl"><span class="clbl">SATURATION</span><input type="range" id="saturation" min="0.5" max="3" value="1.2" step="0.05"></div>
+  <div class="ctrl"><span class="clbl">WOW/FLUTTER</span><input type="range" id="flutter" min="0" max="0.03" value="0.008" step="0.001"></div>
+</div>
+<div id="tag">ANALOG TAPE MACHINE — REEL-TO-REEL AUDIO VISUALIZER</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 680, H = 460;
+canvas.width = W; canvas.height = H;
+canvas.style.maxWidth = '100%';
+
+let analyser, freqData, waveData, running = false;
+let t = 0;
+let tapeBuffer = [];
+const TAPE_LEN = 280;
+let reelAngle = 0;
+let vuLevel = 0;
+let vuPeak = 0;
+let vuPeakHold = 0;
+
+document.getElementById('startBtn').addEventListener('click', async () => {
+  if (!running) {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    const ac = new AudioContext();
+    const src = ac.createMediaStreamSource(stream);
+    analyser = ac.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.7;
+    src.connect(analyser);
+    freqData = new Uint8Array(analyser.frequencyBinCount);
+    waveData = new Float32Array(analyser.fftSize);
+    running = true;
+    document.getElementById('startBtn').textContent = '● REC';
+    document.getElementById('startBtn').classList.add('on');
+  }
+});
+
+function avg(arr,s,e){let v=0;for(let i=s;i<e;i++)v+=arr[i];return v/(e-s)/255}
+
+function drawReel(cx, cy, outerR, innerR, angle, reelFill, highlight) {
+  // Reel flange outer
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(angle);
+
+  // Tape pack (fills between inner and outer)
+  const tapeGrd = ctx.createRadialGradient(0,0,innerR,0,0,outerR);
+  tapeGrd.addColorStop(0,'#2a1a0a');
+  tapeGrd.addColorStop(0.4,'#3a2510');
+  tapeGrd.addColorStop(1,'#1a0c06');
+  ctx.fillStyle = tapeGrd;
+  ctx.beginPath(); ctx.arc(0,0,outerR,0,Math.PI*2); ctx.fill();
+
+  // Spokes (6 arms)
+  for (let i = 0; i < 6; i++) {
+    const a = (i/6)*Math.PI*2;
+    ctx.strokeStyle = '#554433';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a)*innerR*1.1, Math.sin(a)*innerR*1.1);
+    ctx.lineTo(Math.cos(a)*outerR*0.85, Math.sin(a)*outerR*0.85);
+    ctx.stroke();
+  }
+
+  // Inner hub
+  ctx.fillStyle = '#443322';
+  ctx.beginPath(); ctx.arc(0,0,innerR,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle = '#776655';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Hub center
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#555';
+  ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill();
+
+  // Outer flange rim
+  ctx.strokeStyle = '#776655';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0,0,outerR,0,Math.PI*2); ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawVU(x, y, level, peak) {
+  const W2=120, H2=70;
+  ctx.fillStyle='#0a0804';
+  ctx.strokeStyle='#443322';
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  roundRect(x-W2/2, y-H2/2, W2, H2, 4);
+  ctx.fill(); ctx.stroke();
+
+  // Scale markings
+  ctx.fillStyle='#776655';
+  ctx.font='8px Courier New';
+  ctx.textAlign='center';
+  const marks = ['-20','-10','-7','-3','0','+3'];
+  const angles = [-0.8,-0.5,-0.3,-0.1,0.15,0.4];
+  marks.forEach((m,i) => {
+    const a = angles[i];
+    const nx = x + Math.sin(a)*42;
+    const ny = y - 18 + Math.cos(a)*-38;
+    ctx.fillStyle = i >= 4 ? '#cc4422' : '#776655';
+    ctx.fillText(m, nx, ny+4);
+    // Tick
+    ctx.strokeStyle = i >= 4 ? '#cc4422' : '#445';
+    ctx.lineWidth=0.7;
+    ctx.beginPath();
+    ctx.moveTo(x+Math.sin(a)*30, y-18+Math.cos(a)*-28);
+    ctx.lineTo(x+Math.sin(a)*38, y-18+Math.cos(a)*-36);
+    ctx.stroke();
+  });
+
+  // Needle
+  const targetAngle = -0.85 + level * 1.35;
+  const peakAngle = -0.85 + peak * 1.35;
+  // Peak hold
+  ctx.strokeStyle='rgba(255,80,0,0.7)';
+  ctx.lineWidth=0.8;
+  ctx.beginPath();
+  ctx.moveTo(x, y-18);
+  ctx.lineTo(x+Math.sin(peakAngle)*34, y-18+Math.cos(peakAngle)*-32);
+  ctx.stroke();
+  // Main needle
+  ctx.strokeStyle='#e0b060';
+  ctx.lineWidth=1.2;
+  ctx.beginPath();
+  ctx.moveTo(x, y-18);
+  ctx.lineTo(x+Math.sin(targetAngle)*38, y-18+Math.cos(targetAngle)*-36);
+  ctx.stroke();
+  // Pivot
+  ctx.fillStyle='#ccaa77';
+  ctx.beginPath(); ctx.arc(x,y-18,3,0,Math.PI*2); ctx.fill();
+
+  // VU label
+  ctx.fillStyle='#776655';
+  ctx.font='7px Courier New';
+  ctx.textAlign='center';
+  ctx.fillText('VU', x, y+22);
+}
+
+function roundRect(x,y,w,h,r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.lineTo(x+w,y+h-r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.lineTo(x+r,y+h);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.lineTo(x,y+r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function drawTapeHead(cx, cy) {
+  ctx.fillStyle='#443';
+  ctx.fillRect(cx-15,cy-20,30,40);
+  ctx.strokeStyle='#776';
+  ctx.lineWidth=1;
+  ctx.strokeRect(cx-15,cy-20,30,40);
+  // Gap line
+  ctx.strokeStyle='#aaa';
+  ctx.lineWidth=0.5;
+  ctx.beginPath();
+  ctx.moveTo(cx-12,cy); ctx.lineTo(cx+12,cy);
+  ctx.stroke();
+  // Red LED on top
+  ctx.fillStyle = running ? '#cc2200' : '#330000';
+  ctx.beginPath(); ctx.arc(cx, cy-26, 4, 0, Math.PI*2); ctx.fill();
+  if (running) {
+    ctx.shadowColor='#ff4400'; ctx.shadowBlur=6;
+    ctx.fill(); ctx.shadowBlur=0;
+  }
+}
+
+function draw() {
+  requestAnimationFrame(draw);
+  t++;
+
+  if (running && analyser) {
+    analyser.getByteFrequencyData(freqData);
+    analyser.getFloatTimeDomainData(waveData);
+  }
+
+  const bass = freqData ? avg(freqData,0,12) : 0;
+  const mid  = freqData ? avg(freqData,12,80) : 0;
+  const high = freqData ? avg(freqData,80,200) : 0;
+  const vol  = freqData ? avg(freqData,0,200) : 0;
+
+  const tapeSpeed = parseFloat(document.getElementById('tapeSpeed').value);
+  const warmth = parseFloat(document.getElementById('warmth').value);
+  const saturation = parseFloat(document.getElementById('saturation').value);
+  const flutter = parseFloat(document.getElementById('flutter').value);
+
+  // Background — machine body
+  ctx.fillStyle='#1c1208';
+  ctx.fillRect(0,0,W,H);
+
+  // Machine faceplate
+  ctx.fillStyle='#201508';
+  roundRect(20,20,W-40,H-40,12);
+  ctx.fill();
+  ctx.strokeStyle='#443322';
+  ctx.lineWidth=1.5;
+  roundRect(20,20,W-40,H-40,12);
+  ctx.stroke();
+
+  // Screws
+  [[38,38],[W-38,38],[38,H-38],[W-38,H-38]].forEach(([sx,sy]) => {
+    ctx.fillStyle='#332211';
+    ctx.beginPath(); ctx.arc(sx,sy,5,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#554433';
+    ctx.lineWidth=0.7;
+    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx-3,sy); ctx.lineTo(sx+3,sy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx,sy-3); ctx.lineTo(sx,sy+3); ctx.stroke();
+  });
+
+  // WOW/FLUTTER wobble
+  const wf = Math.sin(t*0.07)*flutter + Math.sin(t*0.13)*flutter*0.5;
+  reelAngle += (tapeSpeed + bass * 1.5 + wf) * 0.03;
+
+  // Left reel (supply)
+  const supplyR = 88 - t*0.003 % 20;
+  drawReel(170, 180, supplyR, 28, -reelAngle, '#3a2510', false);
+
+  // Right reel (takeup, spins opposite, grows)
+  const takeupR = 68 + t*0.003 % 20;
+  drawReel(510, 180, takeupR, 28, reelAngle, '#3a2510', false);
+
+  // Tape path — from left reel → heads → right reel
+  // Guides / rollers
+  const guides = [[235,140],[310,140],[370,140],[445,140]];
+  guides.forEach(([gx,gy]) => {
+    ctx.fillStyle='#554433';
+    ctx.beginPath(); ctx.arc(gx,gy,7,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle='#887766';
+    ctx.lineWidth=0.8;
+    ctx.stroke();
+    ctx.fillStyle='#333';
+    ctx.beginPath(); ctx.arc(gx,gy,3,0,Math.PI*2); ctx.fill();
+  });
+
+  // Tape strip
+  ctx.fillStyle='#2a1a08';
+  ctx.fillRect(235,135,210,10);
+  // Tape waveform embedded in tape
+  if (waveData) {
+    const wamp = (bass * saturation * 3.5 + mid * 1.5);
+    const tapeY = 140;
+    ctx.strokeStyle=`rgba(${Math.floor(180+warmth*75)},${Math.floor(110+warmth*40)},40,0.8)`;
+    ctx.lineWidth=0.8;
+    ctx.beginPath();
+    for (let i = 0; i < 200; i++) {
+      const wi = Math.floor(i / 200 * waveData.length);
+      const v = waveData[wi] * wamp * 4;
+      const px = 240 + i;
+      const py = tapeY + v;
+      if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.stroke();
+  }
+
+  // Write tape buffer
+  if (running) {
+    const rms = waveData ? waveData.reduce((a,v)=>a+v*v,0)/waveData.length : 0;
+    const flutter2 = Math.sin(t*0.11)*flutter*40;
+    tapeBuffer.unshift({v: Math.sqrt(rms) * saturation * (1+bass*2) + flutter2, bass, high});
+    if (tapeBuffer.length > TAPE_LEN) tapeBuffer.pop();
+  }
+
+  // Tape recording strip — scrolling display below heads
+  const stripY = 240;
+  const stripH = 80;
+  ctx.fillStyle='#150e06';
+  ctx.fillRect(200, stripY, 280, stripH);
+  ctx.strokeStyle='#332211';
+  ctx.lineWidth=0.5;
+  ctx.strokeRect(200, stripY, 280, stripH);
+
+  // Draw recorded waveform scrolling
+  ctx.strokeStyle='rgba(200,140,50,0.8)';
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  tapeBuffer.forEach((sample,i) => {
+    const px = 200 + (TAPE_LEN - i) * (280 / TAPE_LEN);
+    const py = stripY + stripH/2 + sample.v * stripH * 0.4;
+    if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  });
+  ctx.stroke();
+  ctx.strokeStyle='rgba(180,100,30,0.5)';
+  ctx.lineWidth=0.5;
+  ctx.beginPath();
+  tapeBuffer.forEach((sample,i) => {
+    const px = 200 + (TAPE_LEN - i) * (280 / TAPE_LEN);
+    const py = stripY + stripH/2 - sample.v * stripH * 0.4;
+    if (i===0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  });
+  ctx.stroke();
+
+  // Centerline
+  ctx.strokeStyle='rgba(80,60,30,0.5)';
+  ctx.lineWidth=0.5;
+  ctx.beginPath();
+  ctx.moveTo(200,stripY+stripH/2); ctx.lineTo(480,stripY+stripH/2);
+  ctx.stroke();
+
+  // Tape head
+  drawTapeHead(340, 155);
+
+  // VU meter
+  vuLevel += (vol - vuLevel) * 0.25;
+  if (vol > vuPeak) { vuPeak = vol; vuPeakHold = 60; }
+  if (vuPeakHold > 0) vuPeakHold--; else vuPeak *= 0.98;
+  drawVU(340, 360, vuLevel, vuPeak);
+
+  // Speed indicator
+  ctx.fillStyle='#443322';
+  ctx.font='8px Courier New';
+  ctx.textAlign='center';
+  ctx.fillText(`${(tapeSpeed * 15).toFixed(1)} IPS`, 340, 420);
+
+  // Playhead scrubber line
+  ctx.strokeStyle=`rgba(255,80,0,${0.4 + bass * 0.5})`;
+  ctx.lineWidth=0.8;
+  ctx.beginPath();
+  ctx.moveTo(340, stripY); ctx.lineTo(340, stripY+stripH);
+  ctx.stroke();
+}
+
+draw();
+</script>
+</body>
+</html>
